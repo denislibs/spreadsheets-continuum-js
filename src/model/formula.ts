@@ -253,6 +253,19 @@ export function evaluate(e: Expr, get: (id: string) => number): number {
       return l / r;
     }
     case "call": {
+      if (e.name === "SUMPRODUCT") {
+        // element-wise product of equal-length vectors, then a sum
+        const vecs = e.args.map((a) =>
+          a.t === "range"
+            ? expandRange(a.from, a.to).map(get)
+            : [evaluate(a, get)],
+        );
+        const len = vecs[0]?.length ?? 0;
+        if (vecs.some((v) => v.length !== len)) throw new FormulaError("#ERR!");
+        let sum = 0;
+        for (let i = 0; i < len; i++) sum += vecs.reduce((p, v) => p * v[i], 1);
+        return sum;
+      }
       const fn = FNS[e.name];
       if (!fn) throw new FormulaError("#NAME?");
       const xs: number[] = [];

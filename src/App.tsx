@@ -26,9 +26,22 @@ import {
   rectOf,
   inRect,
   idsInRect,
+  toCsv,
   type Action,
 } from "./model/sheet.js";
 import { indexToCol } from "./model/formula.js";
+import {
+  IconStar,
+  IconCloud,
+  IconClock,
+  IconComment,
+  IconCam,
+  IconPrint,
+  IconSearch,
+  IconLock,
+  IconChevron,
+  IconGridLogo,
+} from "./icons.js";
 
 const LC_KEY = "continuum-tables";
 const CELL_H = 26;
@@ -40,18 +53,6 @@ interface Pos {
   c: number;
   r: number;
 }
-
-const MENU = [
-  "Файл",
-  "Правка",
-  "Вид",
-  "Вставка",
-  "Формат",
-  "Данные",
-  "Инструменты",
-  "Расширения",
-  "Справка",
-];
 
 export function App() {
   // ── the one stream of actions, folded ─────────────────────────────────────
@@ -100,6 +101,25 @@ export function App() {
     widths,
     zoom,
   );
+
+  // ── menus ─────────────────────────────────────────────────────────────────
+  const [openMenu, setOpenMenu] = newBehavior<string | null>(null);
+  onMount(() => {
+    const close = () => setOpenMenu(null);
+    window.addEventListener("mousedown", close);
+    onCleanup(() => window.removeEventListener("mousedown", close));
+  });
+
+  const downloadCsv = () => {
+    const blob = new Blob(["﻿" + toCsv(computed.sample())], {
+      type: "text/csv;charset=utf-8",
+    });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `${title.sample().trim() || "sheet"}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
 
   // ── selection: a rectangle {anchor, focus} ────────────────────────────────
   const [sel, setSel] = newBehavior<{ anchor: Pos; focus: Pos }>({
@@ -254,6 +274,106 @@ export function App() {
 
   let gridEl!: HTMLDivElement;
 
+  // ── menus: data-driven; Файл and Правка are functional ────────────────────
+  type MenuItem =
+    | { sep: true }
+    | {
+        label: string;
+        action?: () => void;
+        disabled?: boolean | Behavior<boolean>;
+      };
+  const MENUS: Array<{ name: string; items: MenuItem[] }> = [
+    {
+      name: "Файл",
+      items: [
+        {
+          label: "Создать",
+          action: () => dispatch({ type: "replace", cells: new Map() }),
+        },
+        { label: "Открыть", disabled: true },
+        { label: "Создать копию", disabled: true },
+        { sep: true },
+        { label: "Скачать (.csv)", action: downloadCsv },
+        { sep: true },
+        { label: "Печать", action: () => window.print() },
+      ],
+    },
+    {
+      name: "Правка",
+      items: [
+        {
+          label: "Отменить",
+          action: () => dispatch({ type: "undo" }),
+          disabled: canUndo.map((v) => !v),
+        },
+        {
+          label: "Повторить",
+          action: () => dispatch({ type: "redo" }),
+          disabled: canRedo.map((v) => !v),
+        },
+        { sep: true },
+        {
+          label: "Удалить значения",
+          action: () =>
+            dispatch({ type: "clearRange", ids: idsInRect(selRect.sample()) }),
+        },
+      ],
+    },
+    { name: "Вид", items: [] },
+    { name: "Вставка", items: [] },
+    { name: "Формат", items: [] },
+    { name: "Данные", items: [] },
+    { name: "Инструменты", items: [] },
+    { name: "Расширения", items: [] },
+    { name: "Справка", items: [] },
+  ];
+
+  const menuBar = MENUS.map((m) => (
+    <span
+      class={openMenu.map((o) =>
+        o === m.name ? "menu-item open" : "menu-item",
+      )}
+      onMousedown={(e) => {
+        e.stopPropagation();
+        if (m.items.length === 0) return;
+        setOpenMenu(openMenu.sample() === m.name ? null : m.name);
+      }}
+      onMouseenter={() => {
+        // Sheets-style: while one menu is open, hovering slides to the next
+        if (openMenu.sample() !== null && m.items.length > 0) {
+          setOpenMenu(m.name);
+        }
+      }}
+    >
+      {m.name}
+      {m.items.length > 0 && (
+        <Show when={openMenu.map((o) => o === m.name)}>
+          {() => (
+            <div class="dropdown" onMousedown={(e) => e.stopPropagation()}>
+              {m.items.map((it) =>
+                "sep" in it ? (
+                  <div class="dd-sep"></div>
+                ) : (
+                  <button
+                    class="dd-item"
+                    disabled={it.disabled ?? !it.action}
+                    onClick={() => {
+                      it.action?.();
+                      setOpenMenu(null);
+                      gridEl.focus();
+                    }}
+                  >
+                    {it.label}
+                  </button>
+                ),
+              )}
+            </div>
+          )}
+        </Show>
+      )}
+    </span>
+  ));
+
   // ── static grid: built once, kept alive by pinpoint bindings ─────────────
   const headerCells = Array.from({ length: COLS }, (_, c) => (
     <div class="cell head" style={`flex-basis:var(--w${c})`}>
@@ -307,7 +427,9 @@ export function App() {
     <div class="app">
       {/* ── row 1: document chrome ─────────────────────────────────────── */}
       <header class="chrome">
-        <div class="sheets-logo">▦</div>
+        <div class="sheets-logo">
+          <IconGridLogo />
+        </div>
         <div class="chrome-main">
           <div class="title-row">
             <input
@@ -316,26 +438,29 @@ export function App() {
               onInput={(e) => setTitle(e.currentTarget.value)}
             />
             <span class="chrome-ico" title="Помеченные">
-              ☆
+              <IconStar />
             </span>
-            <span class="chrome-ico" title="Перемещено на Диск">
-              ☁
+            <span class="chrome-ico" title="Сохранено на Диске">
+              <IconCloud />
             </span>
           </div>
-          <nav class="menubar">
-            {MENU.map((m) => (
-              <span class="menu-item">{m}</span>
-            ))}
-          </nav>
+          <nav class="menubar">{menuBar}</nav>
         </div>
         <div class="chrome-right">
-          <span class="chrome-ico" title="История версий">
-            ⟲
+          <span class="chrome-ico big" title="История версий">
+            <IconClock />
           </span>
-          <span class="chrome-ico" title="Комментарии">
-            🗨
+          <span class="chrome-ico big" title="Комментарии">
+            <IconComment />
           </span>
-          <button class="share">🔒 Настройки Доступа</button>
+          <span class="chrome-ico big" title="Видеовстреча">
+            <IconCam />
+            <IconChevron />
+          </span>
+          <button class="share">
+            <IconLock />
+            <span>Настройки Доступа</span>
+          </button>
           <div class="avatar" title="Denis">
             D
           </div>
@@ -344,6 +469,10 @@ export function App() {
 
       {/* ── row 2: toolbar ─────────────────────────────────────────────── */}
       <div class="toolbar">
+        <span class="search-pill">
+          <IconSearch />
+          <span>Меню</span>
+        </span>
         <button
           class="tool"
           title="Отменить (Ctrl+Z)"
@@ -367,7 +496,7 @@ export function App() {
           ↪
         </button>
         <button class="tool" title="Печать" onClick={() => window.print()}>
-          🖨
+          <IconPrint />
         </button>
         <select
           class="zoom"
@@ -381,7 +510,10 @@ export function App() {
           <option value="125">125%</option>
           <option value="150">150%</option>
         </select>
-        <span class="hint">=A1+B2 · SUM(A1:B9) · AVG · MIN · MAX · COUNT</span>
+        <span class="hint">
+          =A1+B2 · SUM · AVG · MIN · MAX · COUNT · SUMPRODUCT ·{" "}
+          <b>=A#*B#&nbsp;— формула всей колонки</b>
+        </span>
       </div>
 
       {/* ── row 3: formula bar ─────────────────────────────────────────── */}

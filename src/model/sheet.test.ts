@@ -1,5 +1,11 @@
 import { describe, test, expect } from "vitest";
-import { evalSheet, reduce, emptySheet, type SheetState } from "./sheet.js";
+import {
+  evalSheet,
+  reduce,
+  emptySheet,
+  toCsv,
+  type SheetState,
+} from "./sheet.js";
 
 const raw = (entries: Record<string, string>) =>
   new Map(Object.entries(entries));
@@ -100,5 +106,46 @@ describe("reduce (actions → state)", () => {
     const undone = reduce({ type: "undo" }, replaced);
     expect(undone.cells.get("A1")).toBe("1");
     expect(undone.cells.has("B2")).toBe(false);
+  });
+});
+
+describe("column formulas (=A#*B#)", () => {
+  test("the template fills every row that has source data", () => {
+    const out = evalSheet(
+      raw({
+        A2: "2",
+        B2: "3000",
+        A3: "1",
+        B3: "1000",
+        C2: "=A#*B#",
+      }),
+    );
+    expect(out.get("C2")).toBe(6000);
+    expect(out.get("C3")).toBe(1000); // auto-computed — no raw in C3
+    expect(out.get("C4")).toBeUndefined(); // empty row → no phantom zeros
+  });
+
+  test("a new row picks the column formula up automatically", () => {
+    const base = { A2: "2", B2: "3000", C2: "=A#*B#" };
+    expect(evalSheet(raw(base)).get("C5")).toBeUndefined();
+    const out = evalSheet(raw({ ...base, A5: "5", B5: "2" }));
+    expect(out.get("C5")).toBe(10);
+  });
+
+  test("an explicit cell value overrides the column formula", () => {
+    const out = evalSheet(
+      raw({ A2: "2", B2: "10", C2: "=A#*B#", A3: "3", B3: "10", C3: "999" }),
+    );
+    expect(out.get("C2")).toBe(20);
+    expect(out.get("C3")).toBe(999);
+  });
+});
+
+describe("toCsv", () => {
+  test("serializes the used rectangle with quoting", () => {
+    const out = evalSheet(raw({ A1: "Кол-во", B1: "3000", A2: 'say "hi"' }));
+    const csv = toCsv(out);
+    expect(csv.split("\r\n")[0]).toBe("Кол-во,3000");
+    expect(csv.split("\r\n")[1]).toBe('"say ""hi""",');
   });
 });

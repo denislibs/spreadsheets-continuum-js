@@ -84,3 +84,19 @@ describe("parse errors", () => {
     expect(() => parseFormula("A1:A3+1")).toThrow();
   });
 });
+
+describe("SUMPRODUCT", () => {
+  const env = { A1: 2, A2: 1, B1: 3000, B2: 1000 };
+
+  test("pairs ranges element-wise: qty × price", () => {
+    expect(run("SUMPRODUCT(A1:A2, B1:B2)", env)).toBe(7000);
+  });
+
+  test("three ranges multiply through", () => {
+    expect(run("SUMPRODUCT(A1:A2, A1:A2, B1:B2)", env)).toBe(13000);
+  });
+
+  test("mismatched range lengths are a #ERR!", () => {
+    expect(() => run("SUMPRODUCT(A1:A2, B1:B3)", env)).toThrow("#ERR!");
+  });
+});

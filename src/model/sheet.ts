@@ -5,6 +5,7 @@
 import {
   parseFormula,
   evaluate,
+  refsOf,
   FormulaError,
   indexToCol,
   type Expr,
@@ -62,7 +63,11 @@ export function evalSheet(raw: Raw): Map<CellId, Computed> {
     if (src.startsWith("=")) {
       if (inProgress.has(id)) return "#CYCLE!";
       inProgress.add(id);
-      const expr = parsed(src.slice(1));
+      // a column formula (=A#*B#) computes in its own row when read directly
+      const body = src.includes("#")
+        ? src.slice(1).replaceAll("#", rowOf(id))
+        : src.slice(1);
+      const expr = parsed(body);
       if (expr instanceof FormulaError) {
         value = expr.code;
       } else {
@@ -86,8 +91,37 @@ export function evalSheet(raw: Raw): Map<CellId, Computed> {
   };
 
   for (const id of raw.keys()) compute(id);
+
+  // Column formulas: "=A#*B#" typed anywhere in a column applies to every
+  // row (# = the row number). Rows whose referenced cells are all empty stay
+  // empty — no phantom zeros. An explicit cell value always wins.
+  for (const [id, src] of raw) {
+    if (!src.startsWith("=") || !src.includes("#")) continue;
+    const col = /^[A-Z]+/.exec(id)![0];
+    for (let r = 1; r <= ROWS; r++) {
+      const target = `${col}${r}`;
+      if (raw.has(target)) continue;
+      const body = src.slice(1).replaceAll("#", String(r));
+      const expr = parsed(body);
+      if (expr instanceof FormulaError) continue;
+      if (!refsOf(expr).some((ref) => raw.has(ref))) continue;
+      try {
+        done.set(
+          target,
+          evaluate(expr, (ref) => {
+            const v = compute(ref);
+            return typeof v === "number" ? v : 0;
+          }),
+        );
+      } catch (err) {
+        done.set(target, err instanceof FormulaError ? err.code : "#ERR!");
+      }
+    }
+  }
   return done;
 }
+
+const rowOf = (id: CellId): string => /[0-9]+$/.exec(id)![0];
 
 // ── actions and the reducer ─────────────────────────────────────────────────
 
@@ -197,4 +231,29 @@ export function idsInRect(rect: Rect): CellId[] {
     for (let c = rect.c1; c <= rect.c2; c++) out.push(cellId(c, r));
   }
   return out;
+}
+
+/** The used rectangle of computed values as CSV (comma, CRLF, quoted). */
+export function toCsv(computed: Map<CellId, Computed>): string {
+  let maxC = 0;
+  let maxR = 0;
+  const at = new Map<string, Computed>();
+  for (const [id, v] of computed) {
+    const m = /^([A-Z]+)([0-9]+)$/.exec(id)!;
+    const c = [...m[1]].reduce((n, ch) => n * 26 + (ch.charCodeAt(0) - 64), 0);
+    const r = Number(m[2]);
+    maxC = Math.max(maxC, c);
+    maxR = Math.max(maxR, r);
+    at.set(`${c}:${r}`, v);
+  }
+  const quote = (s: string) =>
+    /[",\n]/.test(s) ? `"${s.replaceAll('"', '""')}"` : s;
+  const lines: string[] = [];
+  for (let r = 1; r <= maxR; r++) {
+    const row: string[] = [];
+    for (let c = 1; c <= maxC; c++)
+      row.push(quote(format(at.get(`${c}:${r}`))));
+    lines.push(row.join(","));
+  }
+  return lines.join("\r\n");
 }

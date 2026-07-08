@@ -184,3 +184,44 @@ describe("chrome", () => {
     s.dispose();
   });
 });
+
+describe("column formulas in the UI", () => {
+  test("=A#*B# computes new rows as they appear", () => {
+    const s = setup();
+    key(s.grid, "2");
+    s.typeInto("2"); // A1 = 2, move to A2
+    key(s.grid, "ArrowUp");
+    key(s.grid, "ArrowRight"); // B1
+    key(s.grid, "3");
+    s.typeInto("3000"); // B1 = 3000, move to B2
+    key(s.grid, "ArrowUp");
+    key(s.grid, "ArrowRight"); // C1
+    key(s.grid, "=");
+    s.typeInto("=A#*B#"); // column formula
+    expect(s.cell("C1").textContent).toBe("6000");
+
+    // a brand-new row: fill A2 and B2 — C2 computes itself
+    s.cell("A2").dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    key(s.grid, "1");
+    s.typeInto("1");
+    s.cell("B2").dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    key(s.grid, "1");
+    s.typeInto("1000");
+    expect(s.cell("C2").textContent).toBe("1000");
+    s.dispose();
+  });
+});
+
+describe("menus", () => {
+  test("Файл opens a dropdown with working items", () => {
+    const s = setup();
+    const file = [...s.container.querySelectorAll(".menu-item")].find(
+      (m) => m.textContent === "Файл",
+    )!;
+    file.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    const dd = s.container.querySelector(".dropdown")!;
+    expect(dd.textContent).toContain("Скачать (.csv)");
+    expect(dd.textContent).toContain("Печать");
+    s.dispose();
+  });
+});
