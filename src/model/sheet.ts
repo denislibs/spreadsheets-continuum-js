@@ -269,6 +269,11 @@ export const format = (v: Computed | undefined): string => {
 
 // ── range selection helpers ─────────────────────────────────────────────────
 
+export interface Pos {
+  c: number;
+  r: number;
+}
+
 export interface Rect {
   c1: number;
   c2: number;
@@ -276,10 +281,7 @@ export interface Rect {
   r2: number;
 }
 
-export const rectOf = (
-  a: { c: number; r: number },
-  b: { c: number; r: number },
-): Rect => ({
+export const rectOf = (a: Pos, b: Pos): Rect => ({
   c1: Math.min(a.c, b.c),
   c2: Math.max(a.c, b.c),
   r1: Math.min(a.r, b.r),
