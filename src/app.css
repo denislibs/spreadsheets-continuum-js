@@ -994,6 +994,14 @@ body {
   content: "≡";
 }
 
+/* the resize guide line: the only thing that moves during a drag */
+.resize-guide {
+  position: absolute;
+  z-index: 30;
+  background: #9aa0a6;
+  pointer-events: none;
+}
+
 /* ── menu submenus (Формат → Числа ▸ …) ─────────────────────────────── */
 
 .dd-item {

@@ -124,6 +124,29 @@ export function Grid(props: {
 
       <TableOverlays tables={props.tables} layout={layout} />
 
+      {/* the resize guide: mid-drag only this one line repaints — the grid
+          gets the new size in a single write on mouseup */}
+      <Show when={layout.resizeGuide.map((g) => g !== null)}>
+        {() => (
+          <div
+            class="resize-guide"
+            style={Behavior.lift3(
+              (g, ws, hs) => {
+                if (!g) return "display:none";
+                return g.axis === "col"
+                  ? `left:${g.px}px;top:0;width:2px;` +
+                      `height:${HEAD_H + hs.reduce((a, b) => a + b, 0)}px`
+                  : `left:0;top:${g.px}px;height:2px;` +
+                      `width:${HEAD_W + ws.reduce((a, b) => a + b, 0)}px`;
+              },
+              layout.resizeGuide,
+              layout.widths,
+              layout.heights,
+            )}
+          ></div>
+        )}
+      </Show>
+
       {/* the link chip: a real <a> under the selected cell's URL */}
       <Dynamic
         value={Behavior.lift2(

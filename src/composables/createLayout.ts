@@ -16,6 +16,12 @@ export const HEAD_H = 26;
 const MIN_W = 40;
 const MIN_H = 18;
 
+/** Where the resize guide line sits mid-drag, in content coordinates. */
+export interface ResizeGuide {
+  axis: "col" | "row";
+  px: number;
+}
+
 export interface Layout {
   widths: Behavior<number[]>;
   heights: Behavior<number[]>;
@@ -25,6 +31,9 @@ export interface Layout {
   /** the grid's vertical scroll offset, in CONTENT units (zoom factored out) */
   scrollTop: Behavior<number>;
   setRowHeight: (r: number, h: number) => void;
+  /** non-null while a resize drag is live — only the line repaints, the
+   * grid itself is untouched until mouseup applies the size ONCE */
+  resizeGuide: Behavior<ResizeGuide | null>;
   /** call from the grid's ref: wires the scroll listener into this owner */
   trackScroll: (el: HTMLElement) => void;
   startColResize: (c: number, e: Events.MouseEvent<HTMLDivElement>) => void;
@@ -35,15 +44,23 @@ export interface Layout {
 function drag(
   e: Events.MouseEvent<HTMLDivElement>,
   onMove: (dx: number, dy: number) => void,
+  onUp: (dx: number, dy: number) => void,
 ): void {
   e.preventDefault();
   e.stopPropagation();
   const x0 = e.clientX;
   const y0 = e.clientY;
-  const move = (ev: MouseEvent) => onMove(ev.clientX - x0, ev.clientY - y0);
+  let dx = 0;
+  let dy = 0;
+  const move = (ev: MouseEvent) => {
+    dx = ev.clientX - x0;
+    dy = ev.clientY - y0;
+    onMove(dx, dy);
+  };
   const up = () => {
     window.removeEventListener("mousemove", move);
     window.removeEventListener("mouseup", up);
+    onUp(dx, dy);
   };
   window.addEventListener("mousemove", move);
   window.addEventListener("mouseup", up);
@@ -62,6 +79,7 @@ export function createLayout(storageKey: string): Layout {
 
   const [zoom, setZoom] = newBehavior(100);
   const [rawScroll, setRawScroll] = newBehavior(0);
+  const [resizeGuide, setResizeGuide] = newBehavior<ResizeGuide | null>(null);
   // content units: the grid is CSS-zoomed, scroll offsets are not
   const scrollTop = distinctB(
     Behavior.lift2((s, z) => Math.round(s / (z / 100)), rawScroll, zoom),
@@ -94,21 +112,46 @@ export function createLayout(storageKey: string): Layout {
       el.addEventListener("scroll", onScroll, { passive: true });
       onCleanup(() => el.removeEventListener("scroll", onScroll));
     },
+    resizeGuide,
     startColResize: (c, e) => {
       const w0 = widths.sample()[c];
-      drag(e, (dx) => {
-        const next = [...widths.sample()];
-        next[c] = Math.max(MIN_W, w0 + dx);
-        setWidths(next);
-      });
+      const edge =
+        HEAD_W +
+        widths
+          .sample()
+          .slice(0, c)
+          .reduce((a, b) => a + b, 0);
+      drag(
+        e,
+        (dx) =>
+          setResizeGuide({ axis: "col", px: edge + Math.max(MIN_W, w0 + dx) }),
+        (dx) => {
+          setResizeGuide(null);
+          const next = [...widths.sample()];
+          next[c] = Math.max(MIN_W, w0 + dx);
+          setWidths(next);
+        },
+      );
     },
     startRowResize: (r, e) => {
       const h0 = heights.sample()[r];
-      drag(e, (_dx, dy) => {
-        const next = [...heights.sample()];
-        next[r] = Math.max(MIN_H, h0 + dy);
-        setHeights(next);
-      });
+      const edge =
+        HEAD_H +
+        heights
+          .sample()
+          .slice(0, r)
+          .reduce((a, b) => a + b, 0);
+      drag(
+        e,
+        (_dx, dy) =>
+          setResizeGuide({ axis: "row", px: edge + Math.max(MIN_H, h0 + dy) }),
+        (_dx, dy) => {
+          setResizeGuide(null);
+          const next = [...heights.sample()];
+          next[r] = Math.max(MIN_H, h0 + dy);
+          setHeights(next);
+        },
+      );
     },
   };
 }

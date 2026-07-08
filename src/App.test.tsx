@@ -816,3 +816,40 @@ describe("date picker", () => {
     s.dispose();
   });
 });
+
+describe("resize: guide line while dragging, apply on release", () => {
+  test("column resize shows a guide and applies the width once on mouseup", () => {
+    const s = setup();
+    const resizer = s.container.querySelectorAll(".col-resizer")[0];
+    resizer.dispatchEvent(
+      new MouseEvent("mousedown", { bubbles: true, clientX: 0 }),
+    );
+    window.dispatchEvent(new MouseEvent("mousemove", { clientX: 50 }));
+
+    // mid-drag: the grid is untouched, only the guide line moves
+    expect(s.grid.getAttribute("style")).toContain("--w0:96px");
+    const guide = s.container.querySelector(".resize-guide") as HTMLElement;
+    expect(guide).not.toBeNull();
+    expect(guide.getAttribute("style")).toContain(`left:${48 + 96 + 50}px`);
+
+    window.dispatchEvent(new MouseEvent("mouseup", { clientX: 50 }));
+    expect(s.grid.getAttribute("style")).toContain("--w0:146px");
+    expect(s.container.querySelector(".resize-guide")).toBeNull();
+    s.dispose();
+  });
+
+  test("row resize works the same way, clamped at the minimum", () => {
+    const s = setup();
+    const resizer = s.container.querySelectorAll(".row-resizer")[0];
+    resizer.dispatchEvent(
+      new MouseEvent("mousedown", { bubbles: true, clientY: 0 }),
+    );
+    window.dispatchEvent(new MouseEvent("mousemove", { clientY: -100 }));
+    expect(s.grid.getAttribute("style")).toContain("--h0:26px"); // untouched
+    expect(s.container.querySelector(".resize-guide")).not.toBeNull();
+
+    window.dispatchEvent(new MouseEvent("mouseup", { clientY: -100 }));
+    expect(s.grid.getAttribute("style")).toContain("--h0:18px"); // MIN_H
+    s.dispose();
+  });
+});
