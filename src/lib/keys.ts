@@ -24,6 +24,9 @@ export function makeKeyHandlers(
   focusGrid: () => void,
 ) {
   const onGridKeyDown = (e: Events.KeyboardEvent<HTMLDivElement>) => {
+    // only when the grid itself is focused: keys typed into overlay inputs
+    // (rename chip, options editor) bubble up here and must not start edits
+    if (e.target !== e.currentTarget) return;
     if (editor.editing.sample()) return; // the editor handles its own keys
     const k = e.key.toLowerCase();
     if (NAV[e.key]) {

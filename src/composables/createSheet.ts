@@ -21,8 +21,6 @@ import {
 } from "../model/sheet.js";
 import type { Table } from "../model/tables.js";
 
-export const LC_KEY = "continuum-tables";
-
 // persisted payload: cells + formats in one key (one storage event → one
 // replace action). Older payloads were the bare cells object — migrate.
 type Persisted = {
@@ -51,9 +49,11 @@ export interface Sheet {
   filled: Behavior<number>;
 }
 
-export function createSheet(): Sheet {
+export function createSheet(storageKey: string): Sheet {
   const [actions, dispatch] = newStream<Action>();
-  const initial = migrate(loadPersisted<Record<string, unknown>>(LC_KEY, {}));
+  const initial = migrate(
+    loadPersisted<Record<string, unknown>>(storageKey, {}),
+  );
   const state = actions.accum(
     emptySheet(
       fromPlain(initial.c),
@@ -69,7 +69,7 @@ export function createSheet(): Sheet {
   // persistence: a mirror of the folded value (plain objects for JSON)
   onCleanup(
     persist(
-      LC_KEY,
+      storageKey,
       state.map((s): Persisted => ({
         c: toPlain(s.cells),
         f: formatsToPlain(s.formats),
@@ -80,7 +80,7 @@ export function createSheet(): Sheet {
   // cross-tab sync
   onMount(() => {
     const onStorage = (e: StorageEvent) => {
-      if (e.key === LC_KEY && e.newValue) {
+      if (e.key === storageKey && e.newValue) {
         const p = migrate(JSON.parse(e.newValue));
         dispatch({
           type: "replace",

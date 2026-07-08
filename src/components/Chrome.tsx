@@ -4,7 +4,6 @@
 import { newBehavior, type Behavior } from "@continuum-js/frp";
 import { Show, onCleanup, onMount } from "@continuum-js/dom";
 import { persist, loadPersisted } from "@continuum-js/std";
-import { LC_KEY } from "../composables/createSheet.js";
 import {
   IconStar,
   IconCloud,
@@ -29,11 +28,11 @@ export interface Menu {
 }
 
 /** The title is this component's own concern — created and persisted here. */
-export function createDocTitle() {
+export function createDocTitle(storageKey: string) {
   const [title, setTitle] = newBehavior(
-    loadPersisted(`${LC_KEY}:title`, "Новая таблица"),
+    loadPersisted(`${storageKey}:title`, "Новая таблица"),
   );
-  onCleanup(persist(`${LC_KEY}:title`, title));
+  onCleanup(persist(`${storageKey}:title`, title));
   return { title, setTitle };
 }
 

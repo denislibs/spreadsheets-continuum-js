@@ -953,6 +953,7 @@ body {
 
 .pb-cell {
   position: relative;
+  flex-shrink: 0;
   padding: 0 6px;
   font-weight: 500;
   display: flex;
@@ -1065,4 +1066,162 @@ body {
 
 .link-chip:hover {
   text-decoration: underline;
+}
+
+/* ── home page ───────────────────────────────────────────────────────── */
+
+.home {
+  min-height: 100vh;
+  background: #fff;
+}
+
+.home-top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 20px;
+}
+
+.home-title {
+  font-size: 20px;
+  color: #5f6368;
+}
+
+.home-search {
+  flex: 0 1 700px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #f1f3f4;
+  border-radius: 22px;
+  padding: 10px 18px;
+  color: #5f6368;
+}
+
+.home-create {
+  background: #f1f3f4;
+  padding: 14px 60px 24px;
+}
+
+.home-create h2,
+.home-list h2 {
+  font-size: 15px;
+  font-weight: 500;
+  margin: 8px 0 12px;
+}
+
+.tpl-row {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.tpl-card {
+  border: none;
+  background: none;
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.tpl-preview {
+  width: 150px;
+  height: 110px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.tpl-card:hover .tpl-preview {
+  border-color: var(--green);
+}
+
+.tpl-preview.blank {
+  align-items: center;
+  justify-content: center;
+}
+
+.tpl-plus {
+  font-size: 44px;
+  color: var(--green);
+  font-weight: 300;
+}
+
+.tpl-band {
+  height: 14px;
+  border-radius: 3px;
+  background: #3d5a45;
+}
+
+.tpl-line {
+  height: 9px;
+  border-radius: 3px;
+  background: #e8eaed;
+}
+
+.tpl-line.short {
+  width: 60%;
+}
+
+.tpl-name {
+  display: block;
+  margin-top: 8px;
+  font-size: 13px;
+}
+
+.home-list {
+  padding: 10px 60px;
+  max-width: 1100px;
+}
+
+.doc-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.doc-row:hover {
+  background: #f1f3f4;
+}
+
+.doc-ico {
+  color: var(--green);
+}
+
+.doc-name {
+  flex: 1;
+  font-weight: 500;
+}
+
+.doc-owner,
+.doc-date {
+  color: #5f6368;
+  font-size: 12.5px;
+  width: 90px;
+}
+
+.doc-menu {
+  position: relative;
+}
+
+.doc-dd {
+  right: 0;
+  left: auto;
+}
+
+.home-empty {
+  color: #5f6368;
+}
+
+.notfound {
+  padding: 60px;
+  text-align: center;
 }

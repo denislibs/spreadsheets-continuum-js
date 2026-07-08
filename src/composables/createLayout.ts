@@ -8,7 +8,6 @@ import { distinctB } from "@continuum-js/std";
 import type { Events } from "@continuum-js/dom";
 import { persist, loadPersisted } from "@continuum-js/std";
 import { COLS, ROWS } from "../model/sheet.js";
-import { LC_KEY } from "./createSheet.js";
 
 export const DEFAULT_W = 96;
 export const DEFAULT_H = 26;
@@ -49,16 +48,16 @@ function drag(
   window.addEventListener("mouseup", up);
 }
 
-export function createLayout(): Layout {
+export function createLayout(storageKey: string): Layout {
   const [widths, setWidths] = newBehavior<number[]>(
-    loadPersisted(`${LC_KEY}:widths`, Array(COLS).fill(DEFAULT_W)),
+    loadPersisted(`${storageKey}:widths`, Array(COLS).fill(DEFAULT_W)),
   );
-  onCleanup(persist(`${LC_KEY}:widths`, widths));
+  onCleanup(persist(`${storageKey}:widths`, widths));
 
   const [heights, setHeights] = newBehavior<number[]>(
-    loadPersisted(`${LC_KEY}:heights`, Array(ROWS).fill(DEFAULT_H)),
+    loadPersisted(`${storageKey}:heights`, Array(ROWS).fill(DEFAULT_H)),
   );
-  onCleanup(persist(`${LC_KEY}:heights`, heights));
+  onCleanup(persist(`${storageKey}:heights`, heights));
 
   const [zoom, setZoom] = newBehavior(100);
   const [rawScroll, setRawScroll] = newBehavior(0);

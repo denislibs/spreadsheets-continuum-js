@@ -98,9 +98,10 @@ function PinnedBand(props: { t: Table; tables: Tables; layout: Layout }) {
       if (y <= natural) return "display:none"; // not pinned — the real row shows
       if (st + HEAD_H >= end) return "display:none"; // the table has passed
       const widths = t.columns.map((_, i) => ws[t.anchor.c + i]);
+      const total = widths.reduce((a, b) => a + b, 0);
       return (
         `left:${left(ws, t.anchor.c)}px;top:${y}px;` +
-        `height:${hs[t.anchor.r]}px;` +
+        `width:${total}px;height:${hs[t.anchor.r]}px;` +
         `background:${t.headerColor ?? "#3d5a45"};` +
         widths.map((w, i) => `--pb${i}:${w}px`).join(";")
       );

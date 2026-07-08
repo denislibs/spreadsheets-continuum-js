@@ -1,6 +1,6 @@
 import { describe, test, expect, beforeEach } from "vitest";
 import { mount } from "@continuum-js/dom";
-import { App } from "./App.js";
+import { SheetEditor } from "./components/SheetEditor.js";
 
 const key = (el: Element, k: string, mods: KeyboardEventInit = {}) =>
   el.dispatchEvent(new KeyboardEvent("keydown", { key: k, ...mods }));
@@ -9,7 +9,7 @@ function setup() {
   localStorage.clear();
   const container = document.createElement("div");
   document.body.appendChild(container);
-  const dispose = mount(container, () => <App />);
+  const dispose = mount(container, () => <SheetEditor docId="test-doc" />);
   const grid = container.querySelector<HTMLDivElement>(".grid")!;
   const cell = (id: string) =>
     container.querySelector<HTMLDivElement>(`[data-id="${id}"]`)!;
@@ -109,7 +109,7 @@ describe("Continuum Tables", () => {
     // a fresh mount reads localStorage — no clearing this time
     const container = document.createElement("div");
     document.body.appendChild(container);
-    const dispose = mount(container, () => <App />);
+    const dispose = mount(container, () => <SheetEditor docId="test-doc" />);
     expect(
       container.querySelector<HTMLDivElement>(`[data-id="A1"]`)!.textContent,
     ).toBe("9");
