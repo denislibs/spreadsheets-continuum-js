@@ -322,8 +322,34 @@ describe("structured tables", () => {
     ) as HTMLButtonElement;
     opt.click();
 
-    expect(s.cell("C2").textContent).toContain("В отпуске");
-    expect(s.cell("C2").getAttribute("style")).toContain("#bfe1f6");
+    // the value sits in a rounded badge, like Sheets — the CELL stays unfilled
+    const chip = s.cell("C2").querySelector(".chip") as HTMLElement;
+    expect(chip).not.toBeNull();
+    expect(chip.textContent).toBe("В отпуске");
+    expect(chip.getAttribute("style")).toContain("#bfe1f6");
+    expect(s.cell("C2").getAttribute("style") ?? "").not.toContain("#bfe1f6");
+    s.dispose();
+  });
+
+  test("a person value renders as a badge too", () => {
+    const s = setup();
+    openPanel(s);
+    (
+      [...s.container.querySelectorAll(".tp-item")].find((b) =>
+        b.textContent!.includes("Пользователи"),
+      ) as HTMLButtonElement
+    ).click();
+
+    s.cell("A2").dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    key(s.grid, "А"); // «Имя» is a person column
+    s.typeInto("Аня");
+
+    const chip = s.cell("A2").querySelector(".chip") as HTMLElement;
+    expect(chip).not.toBeNull();
+    expect(chip.textContent).toBe("Аня");
+    expect(chip.className).toContain("chip-person");
+    // an empty person cell shows no badge
+    expect(s.cell("A3").querySelector(".chip")).toBeNull();
     s.dispose();
   });
 

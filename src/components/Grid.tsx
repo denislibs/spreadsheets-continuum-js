@@ -234,22 +234,39 @@ function Cell(props: {
   );
   // URL values render as links (see the .t-link style + the LinkChip overlay)
   const isLink = sheet.computed.map((m) => isUrl(m.get(id)));
-  // format layer + the table layer (header band, status chip colors)
-  const style = Behavior.lift3(
-    (f, p, m) => {
+  // format layer + the table header band color
+  const style = Behavior.lift2(
+    (f, p) => {
       let extra = styleOf(f.get(id));
       if (p?.kind === "header") {
         extra += `${extra ? ";" : ""}background:${p.color}`;
-      }
-      if (p?.kind === "select") {
-        const color = optionColor(p.options, String(m.get(id) ?? ""));
-        if (color) extra += `${extra ? ";" : ""}background:${color}`;
       }
       return `flex-basis:var(--w${c})${extra ? ";" + extra : ""}`;
     },
     sheet.formats,
     pres,
-    sheet.computed,
+  );
+
+  // select and person values sit in a rounded badge, like Sheets — the badge
+  // carries the option color, the cell itself stays unfilled
+  const chipCls = Behavior.lift2(
+    (p, v) => {
+      if (!v) return "";
+      if (p?.kind === "select") return "chip";
+      if (p?.kind === "person") return "chip chip-person";
+      return "";
+    },
+    pres,
+    text,
+  );
+  const chipStyle = Behavior.lift2(
+    (p, v) => {
+      if (!v || p?.kind !== "select") return "";
+      const color = optionColor(p.options, v);
+      return color ? `background:${color}` : "";
+    },
+    pres,
+    text,
   );
 
   return (
@@ -269,7 +286,9 @@ function Cell(props: {
       onMouseenter={() => selection.dragOver({ c, r })}
       onDblclick={() => editor.start()}
     >
-      {text}
+      <span class={chipCls} style={chipStyle}>
+        {text}
+      </span>
     </div>
   );
 }

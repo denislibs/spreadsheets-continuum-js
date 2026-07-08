@@ -636,6 +636,42 @@ body {
     center / contain no-repeat;
 }
 
+/* with a value the badge takes over — the loose ᴀ affordance is for empties */
+.cell.t-person:has(.chip)::before {
+  content: none;
+}
+
+/* select/person values render as a rounded badge, like Sheets */
+.cell .chip {
+  display: inline-block;
+  max-width: 100%;
+  padding: 2px 12px;
+  border-radius: 11px;
+  font-size: 13px;
+  line-height: 18px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: top;
+}
+
+.cell .chip-person {
+  background: #e8eaed;
+}
+
+.cell .chip-person::before {
+  content: "";
+  display: inline-block;
+  width: 11px;
+  height: 11px;
+  margin-right: 5px;
+  vertical-align: -1px;
+  background-color: #5f6368;
+  -webkit-mask: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2.4"><circle cx="12" cy="8" r="3.5"/><path d="M5 19.5a7 7 0 0 1 14 0"/></svg>')
+    center / contain no-repeat;
+  mask: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2.4"><circle cx="12" cy="8" r="3.5"/><path d="M5 19.5a7 7 0 0 1 14 0"/></svg>')
+    center / contain no-repeat;
+}
+
 .select-dd {
   position: absolute;
   z-index: 40;
