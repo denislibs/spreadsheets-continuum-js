@@ -19,12 +19,17 @@ import {
   type Computed,
   type CellId,
 } from "../model/sheet.js";
+import type { Table } from "../model/tables.js";
 
 export const LC_KEY = "continuum-tables";
 
 // persisted payload: cells + formats in one key (one storage event → one
 // replace action). Older payloads were the bare cells object — migrate.
-type Persisted = { c: Record<string, string>; f: Record<string, CellFormat> };
+type Persisted = {
+  c: Record<string, string>;
+  f: Record<string, CellFormat>;
+  t?: Table[];
+};
 const migrate = (o: Record<string, unknown>): Persisted =>
   "c" in o
     ? (o as unknown as Persisted)
@@ -39,6 +44,7 @@ export interface Sheet {
   dispatch: (a: Action) => void;
   cells: Behavior<Raw>;
   formats: Behavior<Formats>;
+  tables: Behavior<Table[]>;
   computed: Behavior<Map<CellId, Computed>>;
   canUndo: Behavior<boolean>;
   canRedo: Behavior<boolean>;
@@ -49,11 +55,16 @@ export function createSheet(): Sheet {
   const [actions, dispatch] = newStream<Action>();
   const initial = migrate(loadPersisted<Record<string, unknown>>(LC_KEY, {}));
   const state = actions.accum(
-    emptySheet(fromPlain(initial.c), formatsFromPlain(initial.f)),
+    emptySheet(
+      fromPlain(initial.c),
+      formatsFromPlain(initial.f),
+      initial.t ?? [],
+    ),
     reduce,
   );
   const cells = state.map((s) => s.cells);
   const formats = state.map((s) => s.formats);
+  const tables = state.map((s) => s.tables);
 
   // persistence: a mirror of the folded value (plain objects for JSON)
   onCleanup(
@@ -75,6 +86,7 @@ export function createSheet(): Sheet {
           type: "replace",
           cells: fromPlain(p.c),
           formats: formatsFromPlain(p.f),
+          tables: p.t ?? [],
         });
       }
     };
@@ -87,6 +99,7 @@ export function createSheet(): Sheet {
     dispatch,
     cells,
     formats,
+    tables,
     computed: cells.map(evalSheet),
     canUndo: state.map((s) => s.past.length > 0),
     canRedo: state.map((s) => s.future.length > 0),

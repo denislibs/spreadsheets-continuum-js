@@ -10,7 +10,6 @@ import type { Selection } from "../composables/createSelection.js";
 export type ToggleKey = "b" | "i" | "u" | "s";
 
 export interface Formatting {
-  /** the anchor cell's format — drives the pressed state of toolbar buttons */
   anchorFormat: Behavior<CellFormat>;
   apply: (patch: Partial<CellFormat>) => void;
   toggle: (key: ToggleKey) => void;

@@ -6,6 +6,9 @@ import { Behavior } from "@continuum-js/frp";
 import { Show, onMount } from "@continuum-js/dom";
 import type { Events } from "@continuum-js/dom";
 import { COLS, ROWS, cellId, format, inRect, styleOf } from "../model/sheet.js";
+import { optionColor } from "../model/tables.js";
+import type { Tables } from "../composables/createTables.js";
+import { TableOverlays } from "./TableOverlays.js";
 import { indexToCol } from "../model/formula.js";
 import type { Sheet } from "../composables/createSheet.js";
 import type { Selection } from "../composables/createSelection.js";
@@ -17,6 +20,7 @@ export function Grid(props: {
   selection: Selection;
   editor: Editor;
   layout: Layout;
+  tables: Tables;
   onKeydown: (e: Events.KeyboardEvent<HTMLDivElement>) => void;
   onEditorKeydown: (e: Events.KeyboardEvent<HTMLInputElement>) => void;
   gridRef: (el: HTMLDivElement) => void;
@@ -83,6 +87,8 @@ export function Grid(props: {
       </div>
       {rows}
 
+      <TableOverlays tables={props.tables} layout={layout} />
+
       <Show when={editor.editing}>
         {() => (
           <input
@@ -130,24 +136,44 @@ function Cell(props: {
   sheet: Sheet;
   selection: Selection;
   editor: Editor;
+  tables: Tables;
 }) {
-  const { c, r, sheet, selection, editor } = props;
+  const { c, r, sheet, selection, editor, tables } = props;
   const id = cellId(c, r);
+  const pres = tables.presentation.map((p) => p.get(id));
 
-  const text = sheet.computed.map((m) => format(m.get(id)));
-  const cls = Behavior.lift2(
-    (a, rect) => {
+  // a table header shows the column name; everything else shows the value
+  const text = Behavior.lift2(
+    (m, p) => (p?.kind === "header" ? p.label : format(m.get(id))),
+    sheet.computed,
+    pres,
+  );
+  const cls = Behavior.lift3(
+    (a, rect, p) => {
       const active = a.c === c && a.r === r;
       const inSel = inRect(rect, c, r);
-      return `cell${active ? " active" : inSel ? " in-range" : ""}`;
+      let s = `cell${active ? " active" : inSel ? " in-range" : ""}`;
+      if (p) s += ` t-${p.kind}`;
+      return s;
     },
     selection.anchor,
     selection.rect,
+    pres,
   );
-  const style = sheet.formats.map((f) => {
-    const extra = styleOf(f.get(id));
-    return `flex-basis:var(--w${c})${extra ? ";" + extra : ""}`;
-  });
+  // format layer + the table layer (header band, status chip colors)
+  const style = Behavior.lift3(
+    (f, p, m) => {
+      let extra = styleOf(f.get(id));
+      if (p?.kind === "select") {
+        const color = optionColor(p.options, String(m.get(id) ?? ""));
+        if (color) extra += `${extra ? ";" : ""}background:${color}`;
+      }
+      return `flex-basis:var(--w${c})${extra ? ";" + extra : ""}`;
+    },
+    sheet.formats,
+    pres,
+    sheet.computed,
+  );
 
   return (
     <div
@@ -157,8 +183,11 @@ function Cell(props: {
       onMousedown={(e) => {
         e.preventDefault(); // keep focus on the grid
         editor.commit(null);
+        tables.closeSelect();
         if (e.shiftKey) selection.extendTo({ c, r });
         else selection.beginDrag({ c, r });
+        const p = tables.presentation.sample().get(id);
+        if (p?.kind === "select") tables.showSelect({ c, r }, p.options);
       }}
       onMouseenter={() => selection.dragOver({ c, r })}
       onDblclick={() => editor.start()}

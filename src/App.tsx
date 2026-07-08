@@ -15,6 +15,7 @@ import { createSheet } from "./composables/createSheet.js";
 import { createSelection } from "./composables/createSelection.js";
 import { createEditor } from "./composables/createEditor.js";
 import { createLayout } from "./composables/createLayout.js";
+import { createTables } from "./composables/createTables.js";
 import { makeFormatting } from "./lib/formatting.js";
 import { makeKeyHandlers } from "./lib/keys.js";
 import { Chrome, createDocTitle, type Menu } from "./components/Chrome.js";
@@ -22,6 +23,7 @@ import { Toolbar } from "./components/Toolbar.js";
 import { FormulaBar } from "./components/FormulaBar.js";
 import { Grid } from "./components/Grid.js";
 import { StatusBar } from "./components/StatusBar.js";
+import { TablesPanel } from "./components/TablesPanel.js";
 
 export function App() {
   const sheet = createSheet();
@@ -29,6 +31,7 @@ export function App() {
   const editor = createEditor(sheet, selection);
   const layout = createLayout();
   const { title, setTitle } = createDocTitle();
+  const tables = createTables(sheet, selection);
 
   const fmt = makeFormatting(sheet, selection);
 
@@ -93,7 +96,10 @@ export function App() {
       ],
     },
     { name: "Вид", items: [] },
-    { name: "Вставка", items: [] },
+    {
+      name: "Вставка",
+      items: [{ label: "Таблицы", action: tables.openPanel }],
+    },
     { name: "Формат", items: [] },
     { name: "Данные", items: [] },
     { name: "Инструменты", items: [] },
@@ -125,11 +131,13 @@ export function App() {
         selection={selection}
         editor={editor}
         layout={layout}
+        tables={tables}
         onKeydown={keys.onGridKeyDown}
         onEditorKeydown={keys.onEditorKeyDown}
         gridRef={(el) => (gridEl = el)}
       />
       <StatusBar sheet={sheet} selection={selection} />
+      <TablesPanel tables={tables} />
     </div>
   );
 }

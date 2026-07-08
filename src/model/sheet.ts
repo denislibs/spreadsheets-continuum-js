@@ -158,23 +158,29 @@ export function styleOf(f: CellFormat | undefined): string {
 
 // ── actions and the reducer ─────────────────────────────────────────────────
 
+import type { Table } from "./tables.js";
+
 export type Action =
   | { type: "edit"; id: CellId; raw: string }
   | { type: "fill"; ids: CellId[]; raw: string }
   | { type: "clearRange"; ids: CellId[] }
   | { type: "format"; ids: CellId[]; patch: Partial<CellFormat> }
+  | { type: "addTable"; table: Table }
+  | { type: "addTableRows"; id: string; count: number }
   | { type: "undo" }
   | { type: "redo" }
-  | { type: "replace"; cells: Raw; formats: Formats };
+  | { type: "replace"; cells: Raw; formats: Formats; tables?: Table[] };
 
 interface Snap {
   cells: Raw;
   formats: Formats;
+  tables: Table[];
 }
 
 export interface SheetState {
   cells: Raw;
   formats: Formats;
+  tables: Table[];
   past: Snap[];
   future: Snap[];
 }
@@ -182,15 +188,21 @@ export interface SheetState {
 export const emptySheet = (
   cells: Raw = new Map(),
   formats: Formats = new Map(),
-): SheetState => ({ cells, formats, past: [], future: [] });
+  tables: Table[] = [],
+): SheetState => ({ cells, formats, tables, past: [], future: [] });
 
 const HISTORY_LIMIT = 100;
 
-const snap = (s: SheetState): Snap => ({ cells: s.cells, formats: s.formats });
+const snap = (s: SheetState): Snap => ({
+  cells: s.cells,
+  formats: s.formats,
+  tables: s.tables,
+});
 
 const push = (s: SheetState, next: Partial<Snap>): SheetState => ({
   cells: next.cells ?? s.cells,
   formats: next.formats ?? s.formats,
+  tables: next.tables ?? s.tables,
   past: [...s.past.slice(-HISTORY_LIMIT + 1), snap(s)],
   future: [],
 });
@@ -233,6 +245,14 @@ export function reduce(a: Action, s: SheetState): SheetState {
       }
       return push(s, { formats });
     }
+    case "addTable":
+      return push(s, { tables: [...s.tables, a.table] });
+    case "addTableRows":
+      return push(s, {
+        tables: s.tables.map((t) =>
+          t.id === a.id ? { ...t, rows: t.rows + a.count } : t,
+        ),
+      });
     case "undo": {
       const prev = s.past.at(-1);
       if (!prev) return s;
@@ -249,7 +269,12 @@ export function reduce(a: Action, s: SheetState): SheetState {
     }
     case "replace":
       // cross-tab sync: adopt the other tab's sheet, keep local history
-      return { ...s, cells: a.cells, formats: a.formats };
+      return {
+        ...s,
+        cells: a.cells,
+        formats: a.formats,
+        tables: a.tables ?? s.tables,
+      };
   }
 }
 // ── (de)serialization for persistence ───────────────────────────────────────

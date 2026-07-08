@@ -80,3 +80,26 @@ export const IconGridLogo = () => (
     <path d="M8 9h8M8 13h8M8 17h5" stroke="#fff" stroke-width="1.8" />
   </svg>
 );
+
+export const IconTable = () =>
+  svg([
+    <rect x="4" y="5" width="16" height="14" rx="1.5" />,
+    <path d="M4 10h16M10 10v9" />,
+  ]);
+
+export const IconTasksList = () =>
+  svg([
+    <path d="M4 6l1.5 1.5L8 5" />,
+    <path d="M11 6.5h9" />,
+    <path d="M4 12.5l1.5 1.5L8 11.5" />,
+    <path d="M11 13h9" />,
+    <path d="M11 19h9" />,
+  ]);
+
+export const IconChartLine = () =>
+  svg([<path d="M4 17l4.5-5 3.5 3 6-7" />, <path d="M4 20h16" />]);
+
+export const IconPersonSm = () =>
+  svg([<circle cx="12" cy="8" r="3.5" />, <path d="M5 19.5a7 7 0 0 1 14 0" />]);
+
+export const IconClose = () => svg([<path d="M6 6l12 12M18 6L6 18" />]);

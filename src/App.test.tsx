@@ -278,3 +278,73 @@ describe("column/row selection and formatting", () => {
     s.dispose();
   });
 });
+
+describe("structured tables", () => {
+  const openPanel = (s: ReturnType<typeof setup>) => {
+    const insertMenu = [...s.container.querySelectorAll(".menu-item")].find(
+      (m) => m.textContent === "Вставка",
+    )!;
+    insertMenu.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    const item = [...s.container.querySelectorAll(".dd-item")].find(
+      (b) => b.textContent === "Таблицы",
+    ) as HTMLButtonElement;
+    item.click();
+  };
+
+  test("inserting «Пользователи» renders the header band at the cursor", () => {
+    const s = setup();
+    openPanel(s);
+    const tpl = [...s.container.querySelectorAll(".tp-item")].find((b) =>
+      b.textContent!.includes("Пользователи"),
+    ) as HTMLButtonElement;
+    tpl.click();
+
+    expect(s.cell("A1").textContent).toBe("Имя");
+    expect(s.cell("A1").className).toContain("t-header");
+    expect(s.cell("C1").textContent).toBe("Статус");
+    expect(s.cell("C2").className).toContain("t-select");
+    s.dispose();
+  });
+
+  test("a select cell opens the chip dropdown and writes the choice", () => {
+    const s = setup();
+    openPanel(s);
+    (
+      [...s.container.querySelectorAll(".tp-item")].find((b) =>
+        b.textContent!.includes("Пользователи"),
+      ) as HTMLButtonElement
+    ).click();
+
+    s.cell("C2").dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    const dd = s.container.querySelector(".select-dd")!;
+    const opt = [...dd.querySelectorAll(".select-opt")].find((b) =>
+      b.textContent!.includes("В отпуске"),
+    ) as HTMLButtonElement;
+    opt.click();
+
+    expect(s.cell("C2").textContent).toContain("В отпуске");
+    expect(s.cell("C2").getAttribute("style")).toContain("#bfe1f6");
+    s.dispose();
+  });
+
+  test("«добавить строки» grows the table; undo removes the whole insert", () => {
+    const s = setup();
+    openPanel(s);
+    (
+      [...s.container.querySelectorAll(".tp-item")].find((b) =>
+        b.textContent!.includes("Задачи"),
+      ) as HTMLButtonElement
+    ).click();
+
+    const before = s.container.querySelectorAll(".t-select").length;
+    (s.container.querySelector(".add-rows-btn") as HTMLButtonElement).click();
+    expect(s.container.querySelectorAll(".t-select").length).toBeGreaterThan(
+      before,
+    );
+
+    key(s.grid, "z", { ctrlKey: true }); // undo add-rows
+    key(s.grid, "z", { ctrlKey: true }); // undo the table itself
+    expect(s.container.querySelectorAll(".t-header").length).toBe(0);
+    s.dispose();
+  });
+});
