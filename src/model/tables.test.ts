@@ -62,3 +62,47 @@ describe("tables in the reducer", () => {
     expect(reduce({ type: "undo" }, s2).tables[0].rows).toBe(t.rows);
   });
 });
+
+describe("table formatting (Форматирование таблицы)", () => {
+  test("setTableFormat merges the patch and participates in undo", () => {
+    const t = instantiate(users, { c: 0, r: 0 }, "t1");
+    const s1 = reduce({ type: "addTable", table: t }, emptySheet());
+    const s2 = reduce(
+      { type: "setTableFormat", id: "t1", patch: { banded: true } },
+      s1,
+    );
+    expect(s2.tables[0].fmt?.banded).toBe(true);
+    const s3 = reduce(
+      { type: "setTableFormat", id: "t1", patch: { grid: false } },
+      s2,
+    );
+    expect(s3.tables[0].fmt).toEqual({ banded: true, grid: false });
+    expect(reduce({ type: "undo" }, s3).tables[0].fmt).toEqual({
+      banded: true,
+    });
+  });
+
+  test("banding decorates every second data row — text columns included", () => {
+    const t: Table = {
+      ...instantiate(users, { c: 0, r: 0 }, "t1"),
+      fmt: { banded: true },
+    };
+    const p = presentationOf([t]);
+    expect(p.get("B2")?.kind).toBe("text"); // «Роль» now carries presentation
+    expect((p.get("B2") as { deco?: string }).deco ?? "").toBe("");
+    expect((p.get("B3") as { deco?: string }).deco).toContain(
+      "background:#f1f3f4",
+    );
+  });
+
+  test("gridlines off makes cell borders transparent via deco", () => {
+    const t: Table = {
+      ...instantiate(users, { c: 0, r: 0 }, "t1"),
+      fmt: { grid: false },
+    };
+    const p = presentationOf([t]);
+    expect((p.get("A2") as { deco?: string }).deco).toContain(
+      "border-right-color:transparent",
+    );
+  });
+});

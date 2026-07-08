@@ -3,7 +3,7 @@
 // stream, so formats undo/persist/sync exactly like values do.
 
 import { Behavior } from "@continuum-js/frp";
-import { idsInRect, type CellFormat } from "../model/sheet.js";
+import { idsInRect, CLEAR_FORMAT, type CellFormat } from "../model/sheet.js";
 import { borderPatches, type BorderKind } from "../model/borders.js";
 import type { Sheet } from "../composables/createSheet.js";
 import type { Selection } from "../composables/createSelection.js";
@@ -57,23 +57,6 @@ export function makeFormatting(sheet: Sheet, selection: Selection): Formatting {
         type: "formatCells",
         entries: borderPatches(selection.rect.sample(), kind),
       }),
-    clear: () =>
-      apply({
-        b: undefined,
-        i: undefined,
-        u: undefined,
-        s: undefined,
-        al: undefined,
-        fg: undefined,
-        bg: undefined,
-        fs: undefined,
-        nf: undefined,
-        dec: undefined,
-        wr: undefined,
-        bt: undefined,
-        bb: undefined,
-        bl: undefined,
-        br: undefined,
-      }),
+    clear: () => apply(CLEAR_FORMAT),
   };
 }

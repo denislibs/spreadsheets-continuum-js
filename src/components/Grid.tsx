@@ -22,6 +22,7 @@ import { indexToCol } from "../model/formula.js";
 import type { Sheet } from "../composables/createSheet.js";
 import type { Selection } from "../composables/createSelection.js";
 import type { Editor } from "../composables/createEditor.js";
+import type { Fill } from "../composables/createFill.js";
 import { HEAD_W, HEAD_H, type Layout } from "../composables/createLayout.js";
 
 export function Grid(props: {
@@ -30,11 +31,12 @@ export function Grid(props: {
   editor: Editor;
   layout: Layout;
   tables: Tables;
+  fill: Fill;
   onKeydown: (e: Events.KeyboardEvent<HTMLDivElement>) => void;
   onEditorKeydown: (e: Events.KeyboardEvent<HTMLInputElement>) => void;
   gridRef: (el: HTMLDivElement) => void;
 }) {
-  const { sheet, selection, editor, layout } = props;
+  const { sheet, selection, editor, layout, fill } = props;
 
   const headerCells = Array.from({ length: COLS }, (_, c) => (
     <div
@@ -123,6 +125,47 @@ export function Grid(props: {
       {rows}
 
       <TableOverlays tables={props.tables} layout={layout} />
+
+      {/* the fill handle: the blue dot on the selection's corner — dragging
+          it copies/extends the range (see createFill) */}
+      <div
+        class="fill-handle"
+        style={Behavior.lift3(
+          (rect, ws, hs) =>
+            `left:${HEAD_W + ws.slice(0, rect.c2 + 1).reduce((a, b) => a + b, 0) - 4}px;` +
+            `top:${HEAD_H + hs.slice(0, rect.r2 + 1).reduce((a, b) => a + b, 0) - 4}px`,
+          selection.rect,
+          layout.widths,
+          layout.heights,
+        )}
+        onMousedown={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          fill.begin();
+        }}
+      ></div>
+
+      {/* the dashed destination preview while the handle is dragged */}
+      <Show when={fill.preview.map((p) => p !== null)}>
+        {() => (
+          <div
+            class="fill-preview"
+            style={Behavior.lift3(
+              (p, ws, hs) => {
+                if (!p) return "display:none";
+                const x = HEAD_W + ws.slice(0, p.c1).reduce((a, b) => a + b, 0);
+                const y = HEAD_H + hs.slice(0, p.r1).reduce((a, b) => a + b, 0);
+                const w = ws.slice(p.c1, p.c2 + 1).reduce((a, b) => a + b, 0);
+                const h = hs.slice(p.r1, p.r2 + 1).reduce((a, b) => a + b, 0);
+                return `left:${x}px;top:${y}px;width:${w}px;height:${h}px`;
+              },
+              fill.preview,
+              layout.widths,
+              layout.heights,
+            )}
+          ></div>
+        )}
+      </Show>
 
       {/* the resize guide: mid-drag only this one line repaints — the grid
           gets the new size in a single write on mouseup */}
@@ -228,6 +271,7 @@ function Cell(props: {
   selection: Selection;
   editor: Editor;
   tables: Tables;
+  fill: Fill;
 }) {
   const { c, r, sheet, selection, editor, tables } = props;
   const id = cellId(c, r);
@@ -257,10 +301,12 @@ function Cell(props: {
   );
   // URL values render as links (see the .t-link style + the LinkChip overlay)
   const isLink = sheet.computed.map((m) => isUrl(m.get(id)));
-  // format layer + the table header band color
+  // table decoration (banding/gridlines/compact) under the user's format
+  // layer (later declarations win), plus the header band color
   const style = Behavior.lift2(
     (f, p) => {
-      let extra = styleOf(f.get(id));
+      const deco = p && p.kind !== "header" ? (p.deco ?? "") : "";
+      let extra = deco + styleOf(f.get(id));
       if (p?.kind === "header") {
         extra += `${extra ? ";" : ""}background:${p.color}`;
       }
@@ -308,7 +354,10 @@ function Cell(props: {
         if (p?.kind === "select") tables.showSelect({ c, r }, p.options);
         else if (p?.kind === "date") tables.showDate({ c, r });
       }}
-      onMouseenter={() => selection.dragOver({ c, r })}
+      onMouseenter={() => {
+        selection.dragOver({ c, r });
+        props.fill.over({ c, r });
+      }}
       onDblclick={() => editor.start()}
     >
       <span class={chipCls} style={chipStyle}>

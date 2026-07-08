@@ -79,30 +79,59 @@ export function TableOverlays(props: { tables: Tables; layout: Layout }) {
         }
       </Dynamic>
 
-      {/* a live outline around every table: grows with columns/rows/resizes */}
+      {/* a live outline around every table (footer row included when on) */}
       <Dynamic value={tables.list}>
         {(list) =>
           list.map((t) => (
-            <div
-              class="table-outline"
-              style={Behavior.lift2(
-                (ws, hs) => {
-                  const w = t.columns.reduce(
-                    (a, _, i) => a + ws[t.anchor.c + i],
-                    0,
-                  );
-                  const h =
-                    top(hs, t.anchor.r + t.rows + 1) - top(hs, t.anchor.r);
-                  return (
-                    `left:${left(ws, t.anchor.c)}px;top:${top(hs, t.anchor.r)}px;` +
-                    `width:${w}px;height:${h}px;` +
-                    `border-color:${t.headerColor ?? "#3d5a45"}`
-                  );
-                },
-                layout.widths,
-                layout.heights,
+            <>
+              <div
+                class="table-outline"
+                style={Behavior.lift2(
+                  (ws, hs) => {
+                    const w = t.columns.reduce(
+                      (a, _, i) => a + ws[t.anchor.c + i],
+                      0,
+                    );
+                    const foot = t.fmt?.footer
+                      ? hs[t.anchor.r + t.rows + 1]
+                      : 0;
+                    const h =
+                      top(hs, t.anchor.r + t.rows + 1) -
+                      top(hs, t.anchor.r) +
+                      foot;
+                    return (
+                      `left:${left(ws, t.anchor.c)}px;top:${top(hs, t.anchor.r)}px;` +
+                      `width:${w}px;height:${h}px;` +
+                      `border-color:${t.headerColor ?? "#3d5a45"}`
+                    );
+                  },
+                  layout.widths,
+                  layout.heights,
+                )}
+              ></div>
+              {t.fmt?.footer && (
+                <div
+                  class="table-footer"
+                  style={Behavior.lift2(
+                    (ws, hs) => {
+                      const w = t.columns.reduce(
+                        (a, _, i) => a + ws[t.anchor.c + i],
+                        0,
+                      );
+                      const y = top(hs, t.anchor.r + t.rows + 1);
+                      return (
+                        `left:${left(ws, t.anchor.c)}px;top:${y}px;` +
+                        `width:${w}px;height:${hs[t.anchor.r + t.rows + 1]}px`
+                      );
+                    },
+                    layout.widths,
+                    layout.heights,
+                  )}
+                >
+                  Строк: {t.rows}
+                </div>
               )}
-            ></div>
+            </>
           ))
         }
       </Dynamic>
@@ -276,35 +305,109 @@ function ActiveTableChrome(props: {
         </button>
       </div>
 
-      {/* the table menu (screenshot: rename / header color / delete) */}
+      {/* the table menu: rename / range / color ▸ / formatting ▸ / clear / delete */}
       <Show when={tables.tableMenuOpen}>
-        {() => (
-          <div
-            class="dropdown tmenu"
-            style={at(t.anchor.c, () => 24)}
-            onMousedown={(e) => e.stopPropagation()}
-          >
-            <button class="dd-item" onClick={tables.startRename}>
-              Переименовать таблицу
+        {() => {
+          const [sub, setSub] = newBehavior<"color" | "fmt" | null>(null);
+          const flip = (patch: Partial<NonNullable<Table["fmt"]>>) =>
+            tables.setFormat(t.id, patch);
+          const toggleItem = (label: string, on: boolean, run: () => void) => (
+            <button class="dd-item" onClick={run}>
+              <span class="dd-check">{on ? "✓" : ""}</span>
+              <span class="dd-label">{label}</span>
             </button>
-            <div class="dd-sep"></div>
-            <div class="tmenu-colors">
-              <span class="tmenu-label">Цвет заголовка</span>
-              {HEADER_COLORS.map((c) => (
-                <button
-                  class="swatch"
-                  style={`background:${c}`}
-                  title={c}
-                  onClick={() => tables.setColor(t.id, c)}
-                ></button>
-              ))}
+          );
+          return (
+            <div
+              class="dropdown tmenu"
+              style={at(t.anchor.c, () => 24)}
+              onMousedown={(e) => e.stopPropagation()}
+            >
+              <button
+                class="dd-item"
+                onMouseenter={() => setSub(null)}
+                onClick={tables.startRename}
+              >
+                Переименовать таблицу
+              </button>
+              <button
+                class="dd-item"
+                disabled
+                onMouseenter={() => setSub(null)}
+              >
+                Изменить диапазон таблицы
+              </button>
+              <div
+                class="dd-item dd-parent"
+                onMouseenter={() => setSub("color")}
+              >
+                <span class="dd-label">Цвет заголовка таблицы</span>
+                <span class="dd-arrow">▸</span>
+                <Show when={sub.map((x) => x === "color")}>
+                  {() => (
+                    <div class="dropdown dd-sub tmenu-colors">
+                      {HEADER_COLORS.map((c) => (
+                        <button
+                          class="swatch"
+                          style={`background:${c}`}
+                          title={c}
+                          onClick={() => tables.setColor(t.id, c)}
+                        ></button>
+                      ))}
+                    </div>
+                  )}
+                </Show>
+              </div>
+              <div class="dd-item dd-parent" onMouseenter={() => setSub("fmt")}>
+                <span class="dd-label">Форматирование таблицы</span>
+                <span class="dd-arrow">▸</span>
+                <Show when={sub.map((x) => x === "fmt")}>
+                  {() => (
+                    <div class="dropdown dd-sub">
+                      {toggleItem(
+                        "Показать линии сетки таблицы",
+                        t.fmt?.grid !== false,
+                        () => flip({ grid: !(t.fmt?.grid !== false) }),
+                      )}
+                      {toggleItem(
+                        "Показать чередующиеся цвета",
+                        !!t.fmt?.banded,
+                        () => flip({ banded: !t.fmt?.banded }),
+                      )}
+                      {toggleItem("Компактный вид", !!t.fmt?.compact, () =>
+                        flip({ compact: !t.fmt?.compact }),
+                      )}
+                      {toggleItem(
+                        "Показать нижний колонтитул таблицы",
+                        !!t.fmt?.footer,
+                        () => flip({ footer: !t.fmt?.footer }),
+                      )}
+                      <div class="dd-sep"></div>
+                      <button class="dd-item" disabled>
+                        Посмотреть расширенные параметры
+                      </button>
+                    </div>
+                  )}
+                </Show>
+              </div>
+              <div class="dd-sep"></div>
+              <button
+                class="dd-item"
+                onMouseenter={() => setSub(null)}
+                onClick={() => tables.clearDataFormats(t)}
+              >
+                Отменить форматирование данных
+              </button>
+              <button
+                class="dd-item"
+                onMouseenter={() => setSub(null)}
+                onClick={() => tables.remove(t.id)}
+              >
+                Удалить таблицу
+              </button>
             </div>
-            <div class="dd-sep"></div>
-            <button class="dd-item" onClick={() => tables.remove(t.id)}>
-              Удалить таблицу
-            </button>
-          </div>
-        )}
+          );
+        }}
       </Show>
 
       {/* ── per-column ▾ buttons: they ride the sticky header row ───────── */}
@@ -423,9 +526,13 @@ function ActiveTableChrome(props: {
       <div
         class="add-rows"
         style={Behavior.lift2(
-          (ws, hs) =>
-            `left:${left(ws, t.anchor.c)}px;` +
-            `top:${top(hs, t.anchor.r + t.rows + 1) + 3}px`,
+          (ws, hs) => {
+            const foot = t.fmt?.footer ? hs[t.anchor.r + t.rows + 1] : 0;
+            return (
+              `left:${left(ws, t.anchor.c)}px;` +
+              `top:${top(hs, t.anchor.r + t.rows + 1) + foot + 3}px`
+            );
+          },
           layout.widths,
           layout.heights,
         )}

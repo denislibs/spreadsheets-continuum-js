@@ -156,6 +156,25 @@ export interface CellFormat {
 }
 export type Formats = Map<CellId, CellFormat>;
 
+/** The patch that unsets every format property (Очистить форматирование). */
+export const CLEAR_FORMAT: Partial<CellFormat> = {
+  b: undefined,
+  i: undefined,
+  u: undefined,
+  s: undefined,
+  al: undefined,
+  fg: undefined,
+  bg: undefined,
+  fs: undefined,
+  nf: undefined,
+  dec: undefined,
+  wr: undefined,
+  bt: undefined,
+  bb: undefined,
+  bl: undefined,
+  br: undefined,
+};
+
 /** A format as an inline css string (empty for no format). */
 export function styleOf(f: CellFormat | undefined): string {
   if (!f) return "";
@@ -241,7 +260,7 @@ export function display(
 
 // ── actions and the reducer ─────────────────────────────────────────────────
 
-import type { ColumnKind, SelectOption, Table } from "./tables.js";
+import type { ColumnKind, SelectOption, Table, TableFmt } from "./tables.js";
 import {
   insertColumnRight,
   removeColumn,
@@ -252,6 +271,7 @@ import {
 export type Action =
   | { type: "edit"; id: CellId; raw: string }
   | { type: "fill"; ids: CellId[]; raw: string }
+  | { type: "editCells"; entries: Array<[CellId, string]> }
   | { type: "clearRange"; ids: CellId[] }
   | { type: "format"; ids: CellId[]; patch: Partial<CellFormat> }
   | { type: "formatCells"; entries: Array<[CellId, Partial<CellFormat>]> }
@@ -259,6 +279,7 @@ export type Action =
   | { type: "addTableRows"; id: string; count: number }
   | { type: "renameTable"; id: string; name: string }
   | { type: "setTableColor"; id: string; color: string }
+  | { type: "setTableFormat"; id: string; patch: Partial<TableFmt> }
   | { type: "removeTable"; id: string }
   | { type: "setColumnKind"; id: string; at: number; kind: ColumnKind }
   | {
@@ -344,6 +365,15 @@ export function reduce(a: Action, s: SheetState): SheetState {
       }
       return push(s, { cells });
     }
+    case "editCells": {
+      // the fill handle's write: many raws, ONE history snapshot
+      const cells = new Map(s.cells);
+      for (const [id, raw] of a.entries) {
+        if (raw === "") cells.delete(id);
+        else cells.set(id, raw);
+      }
+      return push(s, { cells });
+    }
     case "clearRange": {
       const cells = new Map(s.cells);
       for (const id of a.ids) cells.delete(id);
@@ -365,6 +395,12 @@ export function reduce(a: Action, s: SheetState): SheetState {
       return push(s, {
         tables: s.tables.map((t) =>
           t.id === a.id ? { ...t, rows: t.rows + a.count } : t,
+        ),
+      });
+    case "setTableFormat":
+      return push(s, {
+        tables: s.tables.map((t) =>
+          t.id === a.id ? { ...t, fmt: { ...t.fmt, ...a.patch } } : t,
         ),
       });
     case "renameTable":

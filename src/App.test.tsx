@@ -853,3 +853,151 @@ describe("resize: guide line while dragging, apply on release", () => {
     s.dispose();
   });
 });
+
+describe("Форматирование таблицы (name-chip menu)", () => {
+  const insertUsers = (s: ReturnType<typeof setup>) => {
+    const m = [...s.container.querySelectorAll(".menu-item")].find(
+      (x) => x.textContent === "Вставка",
+    )!;
+    m.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    (
+      [...s.container.querySelectorAll(".dd-item")].find(
+        (b) => b.textContent === "Таблицы",
+      ) as HTMLButtonElement
+    ).click();
+    (
+      [...s.container.querySelectorAll(".tp-item")].find((b) =>
+        b.textContent!.includes("Пользователи"),
+      ) as HTMLButtonElement
+    ).click();
+  };
+  const openFmtSub = (s: ReturnType<typeof setup>) => {
+    (s.container.querySelector(".tname-dd") as HTMLButtonElement).click();
+    const parent = [...s.container.querySelectorAll(".tmenu .dd-parent")].find(
+      (b) => b.textContent!.includes("Форматирование таблицы"),
+    )!;
+    parent.dispatchEvent(new MouseEvent("mouseenter"));
+  };
+  const clickToggle = (s: ReturnType<typeof setup>, label: string) => {
+    (
+      [...s.container.querySelectorAll(".tmenu .dd-sub .dd-item")].find((b) =>
+        b.textContent!.includes(label),
+      ) as HTMLButtonElement
+    ).click();
+  };
+
+  test("чередующиеся цвета: every second data row gets tinted", () => {
+    const s = setup();
+    insertUsers(s);
+    openFmtSub(s);
+    clickToggle(s, "чередующиеся цвета");
+    expect(s.cell("A3").getAttribute("style")).toContain("#f1f3f4");
+    expect(s.cell("A2").getAttribute("style") ?? "").not.toContain("#f1f3f4");
+
+    openFmtSub(s);
+    clickToggle(s, "чередующиеся цвета"); // toggles back off
+    expect(s.cell("A3").getAttribute("style") ?? "").not.toContain("#f1f3f4");
+    s.dispose();
+  });
+
+  test("линии сетки: toggling off makes table borders transparent", () => {
+    const s = setup();
+    insertUsers(s);
+    openFmtSub(s);
+    clickToggle(s, "линии сетки");
+    expect(s.cell("B2").getAttribute("style")).toContain(
+      "border-right-color:transparent",
+    );
+    s.dispose();
+  });
+
+  test("нижний колонтитул: the footer band appears under the table", () => {
+    const s = setup();
+    insertUsers(s);
+    expect(s.container.querySelector(".table-footer")).toBeNull();
+    openFmtSub(s);
+    clickToggle(s, "колонтитул");
+    expect(s.container.querySelector(".table-footer")).not.toBeNull();
+    s.dispose();
+  });
+
+  test("отменить форматирование данных clears formats inside the table", () => {
+    const s = setup();
+    insertUsers(s);
+    s.cell("B2").dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    key(s.grid, "b", { ctrlKey: true }); // bold via shortcut
+    expect(s.cell("B2").getAttribute("style")).toContain("font-weight:700");
+
+    (s.container.querySelector(".tname-dd") as HTMLButtonElement).click();
+    (
+      [...s.container.querySelectorAll(".tmenu .dd-item")].find((b) =>
+        b.textContent!.includes("Отменить форматирование данных"),
+      ) as HTMLButtonElement
+    ).click();
+    expect(s.cell("B2").getAttribute("style") ?? "").not.toContain(
+      "font-weight",
+    );
+    s.dispose();
+  });
+});
+
+describe("fill handle (кружок протягивания)", () => {
+  test("dragging the handle down copies the value; one undo reverts", () => {
+    const s = setup();
+    key(s.grid, "5");
+    s.typeInto("5");
+    s.cell("A1").dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    window.dispatchEvent(new MouseEvent("mouseup"));
+
+    const handle = s.container.querySelector(".fill-handle") as HTMLElement;
+    expect(handle).not.toBeNull();
+    handle.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    s.cell("A3").dispatchEvent(new MouseEvent("mouseenter", { bubbles: true }));
+    expect(s.container.querySelector(".fill-preview")).not.toBeNull();
+
+    window.dispatchEvent(new MouseEvent("mouseup"));
+    expect(s.cell("A2").textContent).toBe("5");
+    expect(s.cell("A3").textContent).toBe("5");
+    expect(s.container.querySelector(".fill-preview")).toBeNull();
+
+    key(s.grid, "z", { ctrlKey: true });
+    expect(s.cell("A2").textContent).toBe("");
+    expect(s.cell("A3").textContent).toBe("");
+    s.dispose();
+  });
+
+  test("a numeric pair extends as a series and formulas shift refs", () => {
+    const s = setup();
+    key(s.grid, "1");
+    s.typeInto("1"); // A1
+    key(s.grid, "2");
+    s.typeInto("2"); // A2
+    key(s.grid, "ArrowRight");
+    key(s.grid, "ArrowUp");
+    key(s.grid, "ArrowUp");
+    key(s.grid, "=");
+    s.typeInto("=A1*10"); // B1 = 10
+
+    // series: select A1:A2, drag to A4
+    s.cell("A1").dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    window.dispatchEvent(new MouseEvent("mouseup"));
+    key(s.grid, "ArrowDown", { shiftKey: true });
+    const handle = s.container.querySelector(".fill-handle") as HTMLElement;
+    handle.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    s.cell("A4").dispatchEvent(new MouseEvent("mouseenter", { bubbles: true }));
+    window.dispatchEvent(new MouseEvent("mouseup"));
+    expect(s.cell("A3").textContent).toBe("3");
+    expect(s.cell("A4").textContent).toBe("4");
+
+    // formula: select B1, drag to B3 → =A3*10 over the series
+    s.cell("B1").dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    window.dispatchEvent(new MouseEvent("mouseup"));
+    const h2 = s.container.querySelector(".fill-handle") as HTMLElement;
+    h2.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    s.cell("B3").dispatchEvent(new MouseEvent("mouseenter", { bubbles: true }));
+    window.dispatchEvent(new MouseEvent("mouseup"));
+    expect(s.cell("B2").textContent).toBe("20");
+    expect(s.cell("B3").textContent).toBe("30");
+    s.dispose();
+  });
+});

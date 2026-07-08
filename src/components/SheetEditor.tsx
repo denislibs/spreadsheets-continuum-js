@@ -18,6 +18,7 @@ import { createSelection } from "../composables/createSelection.js";
 import { createEditor } from "../composables/createEditor.js";
 import { createLayout } from "../composables/createLayout.js";
 import { createTables } from "../composables/createTables.js";
+import { createFill } from "../composables/createFill.js";
 import { makeFormatting } from "../lib/formatting.js";
 import { makeKeyHandlers } from "../lib/keys.js";
 import { Chrome, createDocTitle, type Menu } from "./Chrome.js";
@@ -35,6 +36,7 @@ export function SheetEditor(props: { docId: string }) {
   const layout = createLayout(base);
   const { title, setTitle } = createDocTitle(base);
   const tables = createTables(sheet, selection, layout);
+  const fill = createFill(sheet, selection);
 
   // keep the home-page registry in sync: activity bumps updatedAt, the
   // document title mirrors into the doc list
@@ -241,6 +243,7 @@ export function SheetEditor(props: { docId: string }) {
         editor={editor}
         layout={layout}
         tables={tables}
+        fill={fill}
         onKeydown={keys.onGridKeyDown}
         onEditorKeydown={keys.onEditorKeyDown}
         gridRef={(el) => (gridEl = el)}

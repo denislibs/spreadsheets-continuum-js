@@ -4,7 +4,7 @@
 
 import { newBehavior, Behavior } from "@continuum-js/frp";
 import { onCleanup, onMount } from "@continuum-js/dom";
-import { cellId, type Pos } from "../model/sheet.js";
+import { cellId, CLEAR_FORMAT, type Pos } from "../model/sheet.js";
 import {
   TEMPLATES,
   instantiate,
@@ -12,6 +12,7 @@ import {
   tableAt,
   type Template,
   type Table,
+  type TableFmt,
   type CellPresentation,
   type SelectOption,
   type ColumnKind,
@@ -68,6 +69,10 @@ export interface Tables {
   closeMenus: () => void;
   rename: (id: string, name: string) => void;
   setColor: (id: string, color: string) => void;
+  /** «Форматирование таблицы» toggles */
+  setFormat: (id: string, patch: Partial<TableFmt>) => void;
+  /** «Отменить форматирование данных» — clear every cell format in the region */
+  clearDataFormats: (t: Table) => void;
   remove: (id: string) => void;
   setKind: (id: string, at: number, kind: ColumnKind) => void;
   insertColumn: (id: string, at: number) => void;
@@ -181,6 +186,18 @@ export function createTables(
     rename: (id, name) => sheet.dispatch({ type: "renameTable", id, name }),
     setColor: (id, color) => {
       sheet.dispatch({ type: "setTableColor", id, color });
+      setTableMenuOpen(false);
+    },
+    setFormat: (id, patch) => {
+      sheet.dispatch({ type: "setTableFormat", id, patch });
+      setTableMenuOpen(false);
+    },
+    clearDataFormats: (t) => {
+      const ids: string[] = [];
+      for (let i = 0; i < t.columns.length; i++)
+        for (let dr = 1; dr <= t.rows; dr++)
+          ids.push(cellId(t.anchor.c + i, t.anchor.r + dr));
+      sheet.dispatch({ type: "format", ids, patch: CLEAR_FORMAT });
       setTableMenuOpen(false);
     },
     remove: (id) => {

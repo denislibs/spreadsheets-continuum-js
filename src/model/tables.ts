@@ -19,6 +19,14 @@ export interface TableColumn {
   options?: SelectOption[]; // for kind === "select"
 }
 
+/** Форматирование таблицы: presentation toggles, defaults = Sheets. */
+export interface TableFmt {
+  grid?: boolean; // линии сетки (default true)
+  banded?: boolean; // чередующиеся цвета
+  compact?: boolean; // компактный вид
+  footer?: boolean; // нижний колонтитул
+}
+
 export interface Table {
   headerColor?: string;
   id: string;
@@ -26,6 +34,7 @@ export interface Table {
   anchor: Pos; // the header band row
   columns: TableColumn[];
   rows: number; // data rows below the header
+  fmt?: TableFmt;
 }
 
 export interface Template {
@@ -155,16 +164,26 @@ export const instantiate = (tpl: Template, anchor: Pos, id: string): Table => ({
 
 export type CellPresentation =
   | { kind: "header"; label: string; colKind: ColumnKind; color: string }
-  | { kind: "select"; options: SelectOption[] }
-  | { kind: "person" }
-  | { kind: "date" }
-  | { kind: "number" }
-  | { kind: "percent" }
-  | { kind: "notes" };
+  | { kind: "text"; deco?: string }
+  | { kind: "select"; options: SelectOption[]; deco?: string }
+  | { kind: "person"; deco?: string }
+  | { kind: "date"; deco?: string }
+  | { kind: "number"; deco?: string }
+  | { kind: "percent"; deco?: string }
+  | { kind: "notes"; deco?: string };
 
 export function presentationOf(tables: Table[]): Map<CellId, CellPresentation> {
   const out = new Map<CellId, CellPresentation>();
   for (const t of tables) {
+    // «Форматирование таблицы» → an inline-css decoration per data row
+    const deco = (dr: number): string => {
+      let s = "";
+      if (t.fmt?.banded && dr % 2 === 0) s += "background:#f1f3f4;";
+      if (t.fmt?.grid === false)
+        s += "border-right-color:transparent;border-bottom-color:transparent;";
+      if (t.fmt?.compact) s += "padding-top:1px;font-size:12px;";
+      return s;
+    };
     t.columns.forEach((col, i) => {
       const c = t.anchor.c + i;
       out.set(cellId(c, t.anchor.r), {
@@ -175,10 +194,11 @@ export function presentationOf(tables: Table[]): Map<CellId, CellPresentation> {
       });
       for (let dr = 1; dr <= t.rows; dr++) {
         const id = cellId(c, t.anchor.r + dr);
+        const d = deco(dr) || undefined;
         if (col.kind === "select") {
-          out.set(id, { kind: "select", options: col.options ?? [] });
-        } else if (col.kind !== "text") {
-          out.set(id, { kind: col.kind });
+          out.set(id, { kind: "select", options: col.options ?? [], deco: d });
+        } else {
+          out.set(id, { kind: col.kind, deco: d });
         }
       }
     });

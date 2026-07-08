@@ -167,6 +167,8 @@ const colToIndex = (col: string) =>
   [...col].reduce((n, ch) => n * 26 + (ch.charCodeAt(0) - 64), 0);
 
 /** 1 → "A", 26 → "Z", 27 → "AA". */
+export { colToIndex };
+
 export const indexToCol = (n: number): string => {
   let s = "";
   for (let x = n; x > 0; x = Math.floor((x - 1) / 26)) {

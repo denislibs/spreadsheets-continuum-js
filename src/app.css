@@ -880,13 +880,9 @@ body {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 16px 6px;
+  padding: 10px 12px;
   flex-wrap: wrap;
-}
-
-.tmenu-colors .tmenu-label {
-  padding: 0;
-  width: 100%;
+  min-width: 0;
 }
 
 .swatch {
@@ -992,6 +988,51 @@ body {
 
 .th-notes::before {
   content: "≡";
+}
+
+/* ✓ column in the table-formatting toggles */
+.dd-check {
+  width: 18px;
+  flex-shrink: 0;
+  color: #202124;
+}
+
+.dd-item .dd-check + .dd-label {
+  flex: 1;
+  text-align: left;
+}
+
+/* «нижний колонтитул»: the aggregate band under the table */
+.table-footer {
+  position: absolute;
+  z-index: 4;
+  background: #eef0f2;
+  border-top: 1px solid #d0d4d9;
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  color: #5f6368;
+  font-size: 12px;
+  pointer-events: none;
+}
+
+/* the fill handle: Sheets' blue corner dot + its dashed drag preview */
+.fill-handle {
+  position: absolute;
+  z-index: 7;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 1px solid #fff;
+  cursor: crosshair;
+}
+
+.fill-preview {
+  position: absolute;
+  z-index: 6;
+  border: 2px dashed var(--accent);
+  pointer-events: none;
 }
 
 /* the resize guide line: the only thing that moves during a drag */
