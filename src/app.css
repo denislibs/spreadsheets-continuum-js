@@ -452,3 +452,86 @@ body {
 .formula-bar {
   border-top: 1px solid var(--border);
 }
+
+/* ── row heights, format toolbar, header selection ───────────────────── */
+
+.row {
+  align-items: stretch;
+}
+
+.cell {
+  height: auto;
+  line-height: normal;
+  display: flex;
+  align-items: center;
+  min-height: 0;
+}
+
+.cell.head {
+  justify-content: center;
+}
+
+.cell:not(.head) {
+  display: block;
+  overflow: hidden;
+  padding-top: 4px;
+}
+
+.cell.head.col-on {
+  background: #d3e3fd;
+  color: #001d35;
+}
+
+.row-resizer {
+  position: absolute;
+  left: 0;
+  bottom: -3px;
+  width: 100%;
+  height: 6px;
+  cursor: row-resize;
+  z-index: 5;
+}
+
+.row-resizer:hover {
+  background: var(--accent);
+}
+
+/* selection tint as an inset overlay so custom cell backgrounds stay visible */
+.cell.in-range {
+  background: inherit;
+  box-shadow: inset 0 0 0 999px rgba(26, 115, 232, 0.12);
+}
+
+.tool.on {
+  background: #d3e3fd;
+}
+
+.sep {
+  width: 1px;
+  height: 20px;
+  background: var(--border);
+  margin: 0 4px;
+}
+
+.tool.color {
+  position: relative;
+  width: 30px;
+  cursor: pointer;
+}
+
+.tool.color input[type="color"] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.color-glyph {
+  font-weight: 600;
+  border-bottom: 3px solid #e37400;
+  line-height: 1.1;
+}
+
+.color-glyph.fill {
+  border-bottom-color: #fbbc04;
+}

@@ -123,28 +123,77 @@ export function evalSheet(raw: Raw): Map<CellId, Computed> {
 
 const rowOf = (id: CellId): string => /[0-9]+$/.exec(id)![0];
 
+// ── cell formatting ─────────────────────────────────────────────────────────
+
+export interface CellFormat {
+  b?: boolean; // bold
+  i?: boolean; // italic
+  u?: boolean; // underline
+  s?: boolean; // strikethrough
+  al?: "left" | "center" | "right";
+  fg?: string; // text color
+  bg?: string; // fill color
+  fs?: number; // font size, px
+}
+export type Formats = Map<CellId, CellFormat>;
+
+/** A format as an inline css string (empty for no format). */
+export function styleOf(f: CellFormat | undefined): string {
+  if (!f) return "";
+  const out: string[] = [];
+  if (f.b) out.push("font-weight:700");
+  if (f.i) out.push("font-style:italic");
+  if (f.u || f.s) {
+    const deco = [f.u && "underline", f.s && "line-through"]
+      .filter(Boolean)
+      .join(" ");
+    out.push(`text-decoration:${deco}`);
+  }
+  if (f.al) out.push(`text-align:${f.al}`);
+  if (f.fg) out.push(`color:${f.fg}`);
+  if (f.bg) out.push(`background:${f.bg}`);
+  if (f.fs) out.push(`font-size:${f.fs}px`);
+  return out.join(";");
+}
+
 // ── actions and the reducer ─────────────────────────────────────────────────
 
 export type Action =
   | { type: "edit"; id: CellId; raw: string }
+  | { type: "fill"; ids: CellId[]; raw: string }
   | { type: "clearRange"; ids: CellId[] }
+  | { type: "format"; ids: CellId[]; patch: Partial<CellFormat> }
   | { type: "undo" }
   | { type: "redo" }
-  | { type: "replace"; cells: Raw };
+  | { type: "replace"; cells: Raw; formats: Formats };
+
+interface Snap {
+  cells: Raw;
+  formats: Formats;
+}
 
 export interface SheetState {
   cells: Raw;
-  past: Raw[];
-  future: Raw[];
+  formats: Formats;
+  past: Snap[];
+  future: Snap[];
 }
 
-export const emptySheet = (cells: Raw = new Map()): SheetState => ({
-  cells,
-  past: [],
-  future: [],
-});
+export const emptySheet = (
+  cells: Raw = new Map(),
+  formats: Formats = new Map(),
+): SheetState => ({ cells, formats, past: [], future: [] });
 
 const HISTORY_LIMIT = 100;
+
+const snap = (s: SheetState): Snap => ({ cells: s.cells, formats: s.formats });
+
+const push = (s: SheetState, next: Partial<Snap>): SheetState => ({
+  cells: next.cells ?? s.cells,
+  formats: next.formats ?? s.formats,
+  past: [...s.past.slice(-HISTORY_LIMIT + 1), snap(s)],
+  future: [],
+});
 
 export function reduce(a: Action, s: SheetState): SheetState {
   switch (a.type) {
@@ -152,42 +201,57 @@ export function reduce(a: Action, s: SheetState): SheetState {
       const cells = new Map(s.cells);
       if (a.raw === "") cells.delete(a.id);
       else cells.set(a.id, a.raw);
-      return {
-        cells,
-        past: [...s.past.slice(-HISTORY_LIMIT + 1), s.cells],
-        future: [],
-      };
+      return push(s, { cells });
     }
-    case "clearRange": {
+    case "fill": {
       // one action → one history snapshot → one Ctrl+Z
       const cells = new Map(s.cells);
+      for (const id of a.ids) {
+        if (a.raw === "") cells.delete(id);
+        else cells.set(id, a.raw);
+      }
+      return push(s, { cells });
+    }
+    case "clearRange": {
+      const cells = new Map(s.cells);
       for (const id of a.ids) cells.delete(id);
-      return {
-        cells,
-        past: [...s.past.slice(-HISTORY_LIMIT + 1), s.cells],
-        future: [],
-      };
+      return push(s, { cells });
+    }
+    case "format": {
+      const formats = new Map(s.formats);
+      for (const id of a.ids) {
+        const merged: CellFormat = { ...formats.get(id) };
+        for (const [k, v] of Object.entries(a.patch)) {
+          if (v === undefined || v === false) {
+            delete merged[k as keyof CellFormat];
+          } else {
+            (merged as Record<string, unknown>)[k] = v;
+          }
+        }
+        if (Object.keys(merged).length === 0) formats.delete(id);
+        else formats.set(id, merged);
+      }
+      return push(s, { formats });
     }
     case "undo": {
       const prev = s.past.at(-1);
       if (!prev) return s;
       return {
-        cells: prev,
+        ...prev,
         past: s.past.slice(0, -1),
-        future: [s.cells, ...s.future],
+        future: [snap(s), ...s.future],
       };
     }
     case "redo": {
       const [next, ...rest] = s.future;
       if (!next) return s;
-      return { cells: next, past: [...s.past, s.cells], future: rest };
+      return { ...next, past: [...s.past, snap(s)], future: rest };
     }
     case "replace":
       // cross-tab sync: adopt the other tab's sheet, keep local history
-      return { ...s, cells: a.cells };
+      return { ...s, cells: a.cells, formats: a.formats };
   }
 }
-
 // ── (de)serialization for persistence ───────────────────────────────────────
 
 export const toPlain = (raw: Raw): Record<string, string> =>

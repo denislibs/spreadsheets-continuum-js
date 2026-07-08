@@ -225,3 +225,56 @@ describe("menus", () => {
     s.dispose();
   });
 });
+
+describe("column/row selection and formatting", () => {
+  test("clicking the column letter selects the whole column", () => {
+    const s = setup();
+    const headC = [...s.container.querySelectorAll(".cell.head")].find(
+      (h) => h.textContent === "C",
+    )!;
+    headC.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    expect(s.cell("C1").className).toContain("active");
+    expect(s.cell("C50").className).toContain("in-range");
+    expect(s.cell("C99").className).toContain("in-range");
+    expect(s.cell("B5").className).not.toContain("in-range");
+    s.dispose();
+  });
+
+  test("Ctrl+B applies bold to every cell of the selection and undoes as one step", () => {
+    const s = setup();
+    key(s.grid, "5");
+    s.typeInto("5"); // A1
+    const headA = [...s.container.querySelectorAll(".cell.head")].find(
+      (h) => h.textContent === "A",
+    )!;
+    headA.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    key(s.grid, "b", { ctrlKey: true });
+
+    expect(s.cell("A1").getAttribute("style")).toContain("font-weight:700");
+    expect(s.cell("A42").getAttribute("style")).toContain("font-weight:700");
+
+    key(s.grid, "z", { ctrlKey: true }); // one undo removes the whole format
+    expect(s.cell("A1").getAttribute("style")).not.toContain("font-weight");
+    expect(s.cell("A1").textContent).toBe("5"); // the value survived
+    s.dispose();
+  });
+
+  test("committing a value over a multi-selection fills the whole range", () => {
+    const s = setup();
+    s.cell("A1").dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    key(s.grid, "ArrowDown", { shiftKey: true });
+    key(s.grid, "ArrowDown", { shiftKey: true });
+    key(s.grid, "0"); // starts the editor over A1:A3
+    s.typeInto("0");
+    expect(s.cell("A1").textContent).toBe("0");
+    expect(s.cell("A2").textContent).toBe("0");
+    expect(s.cell("A3").textContent).toBe("0");
+    s.dispose();
+  });
+
+  test("row resize handles exist on row headers", () => {
+    const s = setup();
+    expect(s.container.querySelectorAll(".row-resizer").length).toBe(99);
+    s.dispose();
+  });
+});

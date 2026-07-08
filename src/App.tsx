@@ -1,13 +1,13 @@
 // Continuum Tables — a Google-Sheets-style app as a stream-first showcase.
 //
 // The whole architecture is ONE stream of actions folded three ways:
-//   actions ──accum──▶ sheet state (cells + undo history)
+//   actions ──accum──▶ sheet state (cells + formats + undo history)
 //              └──────▶ persistence (mirror of the folded value)
 //              └──────▶ cross-tab sync (the `storage` event is one more
 //                       dispatcher into the same reducer)
-// Selection is a rectangle {anchor, focus}; column widths, zoom and the
-// document title are plain behaviors (no history worth keeping) with their
-// own persistence mirrors. ~2 500 cells × 2 live bindings, no re-renders.
+// Selection is a rectangle {anchor, focus}; column widths, row heights,
+// zoom and the title are plain behaviors (no history worth keeping) with
+// their own persistence mirrors. ~2 500 cells × 3 live bindings each.
 
 import { newStream, newBehavior, Behavior } from "@continuum-js/frp";
 import { Show, onCleanup, onMount } from "@continuum-js/dom";
@@ -27,7 +27,10 @@ import {
   inRect,
   idsInRect,
   toCsv,
+  styleOf,
   type Action,
+  type Formats,
+  type CellFormat,
 } from "./model/sheet.js";
 import { indexToCol } from "./model/formula.js";
 import {
@@ -44,36 +47,65 @@ import {
 } from "./icons.js";
 
 const LC_KEY = "continuum-tables";
-const CELL_H = 26;
 const DEFAULT_W = 96;
+const DEFAULT_H = 26;
 const MIN_W = 40;
+const MIN_H = 18;
 const HEAD_W = 48;
+const HEAD_H = 26;
 
 interface Pos {
   c: number;
   r: number;
 }
 
+// persisted payload: cells + formats in one key (one storage event → one
+// replace action). Older payloads were the bare cells object — migrate.
+type Persisted = { c: Record<string, string>; f: Record<string, CellFormat> };
+const migrate = (o: Record<string, unknown>): Persisted =>
+  "c" in o
+    ? (o as unknown as Persisted)
+    : { c: o as Record<string, string>, f: {} };
+
+const formatsToPlain = (f: Formats) => Object.fromEntries(f);
+const formatsFromPlain = (o: Record<string, CellFormat>): Formats =>
+  new Map(Object.entries(o));
+
 export function App() {
   // ── the one stream of actions, folded ─────────────────────────────────────
   const [actions, dispatch] = newStream<Action>();
+  const initial = migrate(loadPersisted<Record<string, unknown>>(LC_KEY, {}));
   const state = actions.accum(
-    emptySheet(fromPlain(loadPersisted(LC_KEY, {}))),
+    emptySheet(fromPlain(initial.c), formatsFromPlain(initial.f)),
     reduce,
   );
   const cells = state.map((s) => s.cells);
+  const formats = state.map((s) => s.formats);
   const computed = cells.map(evalSheet);
   const canUndo = state.map((s) => s.past.length > 0);
   const canRedo = state.map((s) => s.future.length > 0);
 
-  // persistence: a mirror of the folded value (plain object for JSON)
-  onCleanup(persist(LC_KEY, cells.map(toPlain)));
+  // persistence: a mirror of the folded value (plain objects for JSON)
+  onCleanup(
+    persist(
+      LC_KEY,
+      state.map((s): Persisted => ({
+        c: toPlain(s.cells),
+        f: formatsToPlain(s.formats),
+      })),
+    ),
+  );
 
   // cross-tab sync: the other tab's write is just one more dispatcher
   onMount(() => {
     const onStorage = (e: StorageEvent) => {
       if (e.key === LC_KEY && e.newValue) {
-        dispatch({ type: "replace", cells: fromPlain(JSON.parse(e.newValue)) });
+        const p = migrate(JSON.parse(e.newValue));
+        dispatch({
+          type: "replace",
+          cells: fromPlain(p.c),
+          formats: formatsFromPlain(p.f),
+        });
       }
     };
     window.addEventListener("storage", onStorage);
@@ -91,14 +123,23 @@ export function App() {
   );
   onCleanup(persist(`${LC_KEY}:widths`, widths));
 
+  const [heights, setHeights] = newBehavior<number[]>(
+    loadPersisted(`${LC_KEY}:heights`, Array(ROWS).fill(DEFAULT_H)),
+  );
+  onCleanup(persist(`${LC_KEY}:heights`, heights));
+
   const [zoom, setZoom] = newBehavior(100);
 
-  // column widths reach the 2 500 static cells through CSS variables: ONE
-  // live binding on the grid instead of one per cell
-  const gridStyle = Behavior.lift2(
-    (ws, z) =>
-      ws.map((w, i) => `--w${i}:${w}px`).join(";") + `;zoom:${z / 100}`,
+  // widths/heights reach the ~2 500 static cells through CSS variables:
+  // ONE live binding on the grid instead of one per cell
+  const gridStyle = Behavior.lift3(
+    (ws, hs, z) =>
+      ws.map((w, i) => `--w${i}:${w}px`).join(";") +
+      ";" +
+      hs.map((h, i) => `--h${i}:${h}px`).join(";") +
+      `;zoom:${z / 100}`,
     widths,
+    heights,
     zoom,
   );
 
@@ -137,6 +178,11 @@ export function App() {
     selectedId,
     cells,
   );
+  const anchorFormat = Behavior.lift2(
+    (id, f) => f.get(id) ?? {},
+    selectedId,
+    formats,
+  );
   // the formula bar shows the draft while editing, the raw text otherwise
   const barValue = Behavior.lift3(
     (e, d, raw) => (e ? d : raw),
@@ -171,6 +217,15 @@ export function App() {
   };
   const extendTo = (p: Pos) =>
     setSel({ anchor: sel.sample().anchor, focus: clampPos(p) });
+  const selectColumn = (c: number) =>
+    setSel({ anchor: { c, r: 0 }, focus: { c, r: ROWS - 1 } });
+  const selectRow = (r: number) =>
+    setSel({ anchor: { c: 0, r }, focus: { c: COLS - 1, r } });
+
+  const isMulti = () => {
+    const rect = selRect.sample();
+    return rect.c1 !== rect.c2 || rect.r1 !== rect.r2;
+  };
 
   const startEdit = (initial?: string) => {
     setDraft(initial ?? rawOfSelected.sample());
@@ -178,11 +233,15 @@ export function App() {
   };
   const commit = (move: Pos | null) => {
     if (editing.sample()) {
-      dispatch({
-        type: "edit",
-        id: selectedId.sample(),
-        raw: draft.sample().trim(),
-      });
+      const raw = draft.sample().trim();
+      // a multi-cell selection is FILLED with the committed value; column
+      // formulas (=A#*B#) go to the anchor — the # template already covers
+      // every row by itself
+      if (isMulti() && !raw.includes("#")) {
+        dispatch({ type: "fill", ids: idsInRect(selRect.sample()), raw });
+      } else {
+        dispatch({ type: "edit", id: selectedId.sample(), raw });
+      }
       setEditing(false);
     }
     if (move) {
@@ -192,6 +251,14 @@ export function App() {
   };
   const cancel = () => setEditing(false);
 
+  // ── formatting: a patch dispatched onto the selected rectangle ───────────
+  const applyFormat = (patch: Partial<CellFormat>) => {
+    dispatch({ type: "format", ids: idsInRect(selRect.sample()), patch });
+    gridEl.focus();
+  };
+  const toggleFormat = (key: "b" | "i" | "u" | "s") =>
+    applyFormat({ [key]: anchorFormat.sample()[key] ? undefined : true });
+
   // drag state lives at the DOM boundary — nothing renders from it
   let dragging = false;
   onMount(() => {
@@ -200,23 +267,38 @@ export function App() {
     onCleanup(() => window.removeEventListener("mouseup", up));
   });
 
-  // ── column resize: imperative drag at the boundary, one set() per move ───
-  const startResize = (col: number, e: Events.MouseEvent<HTMLDivElement>) => {
+  // ── column/row resize: imperative drag at the boundary ───────────────────
+  const startDrag = (
+    e: Events.MouseEvent<HTMLDivElement>,
+    onMove: (dx: number, dy: number) => void,
+  ) => {
     e.preventDefault();
     e.stopPropagation();
-    const startX = e.clientX;
-    const startW = widths.sample()[col];
-    const move = (ev: MouseEvent) => {
-      const next = [...widths.sample()];
-      next[col] = Math.max(MIN_W, startW + (ev.clientX - startX));
-      setWidths(next);
-    };
+    const x0 = e.clientX;
+    const y0 = e.clientY;
+    const move = (ev: MouseEvent) => onMove(ev.clientX - x0, ev.clientY - y0);
     const up = () => {
       window.removeEventListener("mousemove", move);
       window.removeEventListener("mouseup", up);
     };
     window.addEventListener("mousemove", move);
     window.addEventListener("mouseup", up);
+  };
+  const startColResize = (c: number, e: Events.MouseEvent<HTMLDivElement>) => {
+    const w0 = widths.sample()[c];
+    startDrag(e, (dx) => {
+      const next = [...widths.sample()];
+      next[c] = Math.max(MIN_W, w0 + dx);
+      setWidths(next);
+    });
+  };
+  const startRowResize = (r: number, e: Events.MouseEvent<HTMLDivElement>) => {
+    const h0 = heights.sample()[r];
+    startDrag(e, (_dx, dy) => {
+      const next = [...heights.sample()];
+      next[r] = Math.max(MIN_H, h0 + dy);
+      setHeights(next);
+    });
   };
 
   // ── keyboard: navigation on the grid, commit/cancel in the editor ────────
@@ -244,6 +326,15 @@ export function App() {
     } else if (e.key === "Delete" || e.key === "Backspace") {
       e.preventDefault();
       dispatch({ type: "clearRange", ids: idsInRect(selRect.sample()) });
+    } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "b") {
+      e.preventDefault();
+      toggleFormat("b");
+    } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "i") {
+      e.preventDefault();
+      toggleFormat("i");
+    } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "u") {
+      e.preventDefault();
+      toggleFormat("u");
     } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") {
       e.preventDefault();
       dispatch({ type: e.shiftKey ? "redo" : "undo" });
@@ -288,7 +379,8 @@ export function App() {
       items: [
         {
           label: "Создать",
-          action: () => dispatch({ type: "replace", cells: new Map() }),
+          action: () =>
+            dispatch({ type: "replace", cells: new Map(), formats: new Map() }),
         },
         { label: "Открыть", disabled: true },
         { label: "Создать копию", disabled: true },
@@ -374,17 +466,70 @@ export function App() {
     </span>
   ));
 
+  // a format-toggle button whose pressed state follows the anchor cell
+  const fmtBtn = (
+    key: "b" | "i" | "u" | "s",
+    label: Node | string,
+    titleText: string,
+  ) => (
+    <button
+      class={anchorFormat.map((f) => (f[key] ? "tool on" : "tool"))}
+      title={titleText}
+      onClick={() => toggleFormat(key)}
+    >
+      {label}
+    </button>
+  );
+  const alignBtn = (al: "left" | "center" | "right", glyph: string) => (
+    <button
+      class={anchorFormat.map((f) =>
+        (f.al ?? "left") === al ? "tool on" : "tool",
+      )}
+      title={`Выравнивание: ${al}`}
+      onClick={() => applyFormat({ al: al === "left" ? undefined : al })}
+    >
+      {glyph}
+    </button>
+  );
+
   // ── static grid: built once, kept alive by pinpoint bindings ─────────────
   const headerCells = Array.from({ length: COLS }, (_, c) => (
-    <div class="cell head" style={`flex-basis:var(--w${c})`}>
+    <div
+      class={selRect.map((rect) =>
+        c >= rect.c1 && c <= rect.c2 ? "cell head col-on" : "cell head",
+      )}
+      style={`flex-basis:var(--w${c})`}
+      onMousedown={(e) => {
+        e.preventDefault();
+        commit(null);
+        selectColumn(c); // click the letter → the whole column
+      }}
+    >
       {indexToCol(c + 1)}
-      <div class="col-resizer" onMousedown={(e) => startResize(c, e)}></div>
+      <div class="col-resizer" onMousedown={(e) => startColResize(c, e)}></div>
     </div>
   ));
 
   const rows = Array.from({ length: ROWS }, (_, r) => (
-    <div class="row">
-      <div class="cell head rowhead">{r + 1}</div>
+    <div class="row" style={`height:var(--h${r})`}>
+      <div
+        class={selRect.map((rect) =>
+          r >= rect.r1 && r <= rect.r2
+            ? "cell head rowhead col-on"
+            : "cell head rowhead",
+        )}
+        onMousedown={(e) => {
+          e.preventDefault();
+          commit(null);
+          selectRow(r); // click the number → the whole row
+        }}
+      >
+        {r + 1}
+        <div
+          class="row-resizer"
+          onMousedown={(e) => startRowResize(r, e)}
+        ></div>
+      </div>
       {Array.from({ length: COLS }, (_, c) => {
         const id = cellId(c, r);
         const text = computed.map((m) => format(m.get(id)));
@@ -397,11 +542,15 @@ export function App() {
           sel,
           selRect,
         );
+        const style = formats.map((f) => {
+          const extra = styleOf(f.get(id));
+          return `flex-basis:var(--w${c})${extra ? ";" + extra : ""}`;
+        });
         return (
           <div
             class={cls}
             data-id={id}
-            style={`flex-basis:var(--w${c})`}
+            style={style}
             onMousedown={(e) => {
               e.preventDefault(); // keep focus on the grid
               commit(null);
@@ -510,9 +659,69 @@ export function App() {
           <option value="125">125%</option>
           <option value="150">150%</option>
         </select>
+
+        <span class="sep"></span>
+
+        {fmtBtn("b", <b>Ж</b>, "Полужирный (Ctrl+B)")}
+        {fmtBtn("i", <i>К</i>, "Курсив (Ctrl+I)")}
+        {fmtBtn("u", <u>Ч</u>, "Подчёркнутый (Ctrl+U)")}
+        {fmtBtn("s", <s>З</s>, "Зачёркнутый")}
+        <select
+          class="zoom"
+          title="Размер шрифта"
+          onChange={(e) => {
+            const n = Number(e.currentTarget.value);
+            applyFormat({ fs: n === 13 ? undefined : n });
+          }}
+        >
+          {[10, 11, 12, 13, 14, 16, 18, 24].map((n) => (
+            <option value={String(n)} selected={n === 13}>
+              {n}
+            </option>
+          ))}
+        </select>
+        <label class="tool color" title="Цвет текста">
+          <span class="color-glyph">A</span>
+          <input
+            type="color"
+            onInput={(e) => applyFormat({ fg: e.currentTarget.value })}
+          />
+        </label>
+        <label class="tool color" title="Цвет заливки">
+          <span class="color-glyph fill">▧</span>
+          <input
+            type="color"
+            value="#ffff88"
+            onInput={(e) => applyFormat({ bg: e.currentTarget.value })}
+          />
+        </label>
+        <button
+          class="tool"
+          title="Очистить форматирование"
+          onClick={() =>
+            applyFormat({
+              b: undefined,
+              i: undefined,
+              u: undefined,
+              s: undefined,
+              al: undefined,
+              fg: undefined,
+              bg: undefined,
+              fs: undefined,
+            })
+          }
+        >
+          ⌫
+        </button>
+
+        <span class="sep"></span>
+
+        {alignBtn("left", "⇤")}
+        {alignBtn("center", "⇔")}
+        {alignBtn("right", "⇥")}
+
         <span class="hint">
-          =A1+B2 · SUM · AVG · MIN · MAX · COUNT · SUMPRODUCT ·{" "}
-          <b>=A#*B#&nbsp;— формула всей колонки</b>
+          =A1+B2 · SUM · SUMPRODUCT · <b>=A#*B# — вся колонка</b>
         </span>
       </div>
 
@@ -539,7 +748,7 @@ export function App() {
         ref={(el) => (gridEl = el)}
         onKeydown={onGridKeyDown}
       >
-        <div class="row">
+        <div class="row" style={`height:${HEAD_H}px`}>
           <div class="cell head corner"></div>
           {headerCells}
         </div>
@@ -551,19 +760,22 @@ export function App() {
               class="editor"
               // Derived INSIDE the region that uses it: the region's scope
               // owns it, so closing the editor disposes it and reopening
-              // derives a fresh one. Geometry: widths are dynamic, so the
-              // left offset is a prefix sum (+ the sticky header row/col).
-              style={Behavior.lift2(
-                (p, ws) => {
+              // derives a fresh one. Geometry: widths/heights are dynamic,
+              // so both offsets are prefix sums (+ the sticky headers).
+              style={Behavior.lift3(
+                (p, ws, hs) => {
                   const left =
                     HEAD_W + ws.slice(0, p.c).reduce((a, b) => a + b, 0);
+                  const top =
+                    HEAD_H + hs.slice(0, p.r).reduce((a, b) => a + b, 0);
                   return (
-                    `left:${left}px;top:${(p.r + 1) * CELL_H}px;` +
-                    `width:${ws[p.c]}px;height:${CELL_H}px`
+                    `left:${left}px;top:${top}px;` +
+                    `width:${ws[p.c]}px;height:${hs[p.r]}px`
                   );
                 },
                 anchor,
                 widths,
+                heights,
               )}
               value={draft}
               onInput={(e) => setDraft(e.currentTarget.value)}

@@ -4,6 +4,7 @@ import {
   reduce,
   emptySheet,
   toCsv,
+  styleOf,
   type SheetState,
 } from "./sheet.js";
 
@@ -97,7 +98,7 @@ describe("reduce (actions → state)", () => {
       { type: "edit", id: "A1", raw: "2" },
     );
     const replaced = reduce(
-      { type: "replace", cells: new Map([["B2", "9"]]) },
+      { type: "replace", cells: new Map([["B2", "9"]]), formats: new Map() },
       s,
     );
     expect(replaced.cells.get("B2")).toBe("9");
@@ -147,5 +148,45 @@ describe("toCsv", () => {
     const csv = toCsv(out);
     expect(csv.split("\r\n")[0]).toBe("Кол-во,3000");
     expect(csv.split("\r\n")[1]).toBe('"say ""hi""",');
+  });
+});
+
+describe("formats and fill", () => {
+  const after = (...actions: Parameters<typeof reduce>[0][]): SheetState =>
+    actions.reduce((s, a) => reduce(a, s), emptySheet());
+
+  test("format merges a patch per cell and participates in undo", () => {
+    const s = after(
+      { type: "edit", id: "A1", raw: "x" },
+      { type: "format", ids: ["A1", "A2"], patch: { b: true } },
+      { type: "format", ids: ["A1"], patch: { al: "center" } },
+    );
+    expect(s.formats.get("A1")).toEqual({ b: true, al: "center" });
+    expect(s.formats.get("A2")).toEqual({ b: true });
+
+    const undone = reduce({ type: "undo" }, s);
+    expect(undone.formats.get("A1")).toEqual({ b: true }); // one step back
+  });
+
+  test("unsetting the last property drops the cell's format entry", () => {
+    const s = after(
+      { type: "format", ids: ["A1"], patch: { b: true } },
+      { type: "format", ids: ["A1"], patch: { b: undefined } },
+    );
+    expect(s.formats.has("A1")).toBe(false);
+  });
+
+  test("fill writes one raw into every cell as ONE undo step", () => {
+    const s = after({ type: "fill", ids: ["A1", "A2", "B1"], raw: "7" });
+    expect(s.cells.get("A2")).toBe("7");
+    expect(s.cells.get("B1")).toBe("7");
+    expect(reduce({ type: "undo" }, s).cells.size).toBe(0);
+  });
+
+  test("styleOf renders a css string", () => {
+    expect(styleOf({ b: true, i: true, al: "right", bg: "#ffff00" })).toBe(
+      "font-weight:700;font-style:italic;text-align:right;background:#ffff00",
+    );
+    expect(styleOf(undefined)).toBe("");
   });
 });
