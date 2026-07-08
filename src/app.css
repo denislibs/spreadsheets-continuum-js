@@ -998,7 +998,7 @@ body {
 .resize-guide {
   position: absolute;
   z-index: 30;
-  background: #9aa0a6;
+  background: var(--accent);
   pointer-events: none;
 }
 
