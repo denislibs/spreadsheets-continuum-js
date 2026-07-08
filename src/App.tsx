@@ -4,7 +4,8 @@
 // swaps the document without tearing the page down twice.
 
 import { Dynamic } from "@continuum-js/dom";
-import { Router, useParams, Link } from "@continuum-js/router";
+import { Router, useParams, Link, type RouteDef } from "@continuum-js/router";
+import { underBase, withBase } from "./lib/base.js";
 import { Home } from "./components/Home.js";
 import { SheetEditor } from "./components/SheetEditor.js";
 
@@ -17,14 +18,16 @@ function DocPage() {
 export function App() {
   return (
     <Router
-      routes={[
-        { path: "", component: Home },
-        { path: "d/:id", component: DocPage },
-      ]}
+      routes={
+        underBase([
+          { path: "", component: Home },
+          { path: "d/:id", component: DocPage },
+        ]) as RouteDef[]
+      }
       fallback={() => (
         <div class="notfound">
           <h1>Здесь ничего нет</h1>
-          <Link href="/">К списку таблиц</Link>
+          <Link href={withBase("/")}>К списку таблиц</Link>
         </div>
       )}
     />

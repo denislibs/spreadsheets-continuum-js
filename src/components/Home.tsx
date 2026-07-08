@@ -4,6 +4,7 @@
 import { newBehavior } from "@continuum-js/frp";
 import { Dynamic } from "@continuum-js/dom";
 import { navigate } from "@continuum-js/router";
+import { withBase } from "../lib/base.js";
 import {
   loadDocs,
   createDoc,
@@ -18,7 +19,7 @@ export function Home() {
   const [docs, setDocs] = newBehavior(loadDocs());
   const [menuFor, setMenuFor] = newBehavior<string | null>(null);
 
-  const open = (id: string) => navigate(`/d/${id}`);
+  const open = (id: string) => navigate(withBase(`/d/${id}`));
 
   const create = (tpl?: Template) => {
     const doc = createDoc(tpl ? tpl.name : "Новая таблица");
