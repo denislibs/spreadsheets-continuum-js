@@ -179,13 +179,19 @@ function ActiveTableChrome(props: {
       <div
         class="tname"
         style={Behavior.lift3(
-          (ws, hs, _r) =>
-            `left:${left(ws, t.anchor.c)}px;` +
-            `top:${top(hs, t.anchor.r) - 23}px;` +
-            `background:${t.headerColor ?? "#3d5a45"}`,
+          (ws, hs, st) => {
+            const y = top(hs, t.anchor.r) - 23;
+            // like Sheets: the chip rides its table and slips away under
+            // the letters row instead of floating over it
+            if (y < st + HEAD_H) return "display:none";
+            return (
+              `left:${left(ws, t.anchor.c)}px;top:${y}px;` +
+              `background:${t.headerColor ?? "#3d5a45"}`
+            );
+          },
           layout.widths,
           layout.heights,
-          tables.renaming,
+          layout.scrollTop,
         )}
         onMousedown={(e) => e.stopPropagation()}
       >

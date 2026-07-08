@@ -1249,3 +1249,27 @@ body {
   border-radius: 2px;
   pointer-events: none;
 }
+
+/* ── layering, Sheets-style: the letter/number panes cover table chrome ── */
+
+.row:first-child {
+  z-index: 28; /* the letters row: everything table-owned slides under it */
+}
+
+.rowhead {
+  z-index: 26;
+}
+
+.corner {
+  z-index: 29;
+}
+
+.th-dd,
+.tplus,
+.tname {
+  z-index: 23; /* below the pinned band (24), letters (28), menus (40+) */
+}
+
+.add-rows {
+  z-index: 23;
+}
