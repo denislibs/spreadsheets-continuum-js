@@ -941,32 +941,7 @@ body {
   content: "≡";
 }
 
-/* ── pinned band, options editor, links ──────────────────────────────── */
-
-.pinned-band {
-  position: absolute;
-  z-index: 24;
-  display: flex;
-  color: #fff;
-  box-shadow: 0 2px 4px rgba(60, 64, 67, 0.3);
-}
-
-.pb-cell {
-  position: relative;
-  flex-shrink: 0;
-  padding: 0 6px;
-  font-weight: 500;
-  display: flex;
-  align-items: center;
-  overflow: hidden;
-  white-space: nowrap;
-  border-right: 1px solid rgba(255, 255, 255, 0.25);
-}
-
-.pb-dd {
-  position: static;
-  margin-left: auto;
-}
+/* ── options editor, links ───────────────────────────────────────────── */
 
 .opts-list {
   display: flex;
@@ -1265,9 +1240,12 @@ body {
 }
 
 .th-dd,
-.tplus,
+.tplus {
+  z-index: 27; /* over the sticky header row (27, later in DOM), under letters (28) */
+}
+
 .tname {
-  z-index: 23; /* below the pinned band (24), letters (28), menus (40+) */
+  z-index: 23; /* rides its table, slips under the letters row */
 }
 
 .add-rows {

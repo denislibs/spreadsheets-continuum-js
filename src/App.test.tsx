@@ -499,6 +499,34 @@ describe("table chrome", () => {
     expect(s.cell("B2").className).toContain("t-select");
     s.dispose();
   });
+
+  test("clicking a cell closes an open column menu", () => {
+    const s = setup();
+    insertUsers(s);
+    (s.container.querySelectorAll(".th-dd")[0] as HTMLButtonElement).click();
+    expect(s.container.querySelector(".colmenu")).not.toBeNull();
+
+    // a cell INSIDE the table: the chrome stays mounted, the menu must close
+    s.cell("A5").dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    expect(s.container.querySelector(".colmenu")).toBeNull();
+    s.dispose();
+  });
+
+  test("opening the column menu closes the select dropdown (and vice versa)", () => {
+    const s = setup();
+    insertUsers(s);
+    s.cell("C2").dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    expect(s.container.querySelector(".select-dd")).not.toBeNull();
+
+    (s.container.querySelectorAll(".th-dd")[2] as HTMLButtonElement).click();
+    expect(s.container.querySelector(".colmenu")).not.toBeNull();
+    expect(s.container.querySelector(".select-dd")).toBeNull(); // not both
+
+    s.cell("C2").dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    expect(s.container.querySelector(".select-dd")).not.toBeNull();
+    expect(s.container.querySelector(".colmenu")).toBeNull();
+    s.dispose();
+  });
 });
 
 describe("sticky band, options editor, links", () => {
@@ -519,19 +547,33 @@ describe("sticky band, options editor, links", () => {
     ).click();
   };
 
-  test("the header band pins under the letters while scrolling through", () => {
+  test("the header ROW itself (with its number) is sticky under the letters", () => {
     const s = setup();
     insertUsers2(s);
-    const band = s.container.querySelector(".pinned-band") as HTMLElement;
-    expect(band.getAttribute("style")).toContain("display:none"); // not scrolled
+    // .grid rows: [0] = letters, [1] = sheet row 1 = the table's header row
+    const rows = s.container.querySelectorAll<HTMLElement>(".grid > .row");
+    const headerRow = rows[1];
+    const plainRow = rows[2];
 
-    s.grid.scrollTop = 100; // inside the table (rows end at 26+7*26=208)
-    s.grid.dispatchEvent(new Event("scroll"));
-    expect(band.getAttribute("style")).toContain("top:126px"); // 100 + letters
+    // the whole row is sticky — the row number «1» pins along with the band
+    expect(headerRow.getAttribute("style")).toContain("position:sticky");
+    expect(headerRow.getAttribute("style")).toContain("top:26px");
+    expect(headerRow.contains(s.cell("A1"))).toBe(true);
+    expect(plainRow.getAttribute("style")).not.toContain("sticky");
 
-    s.grid.scrollTop = 1000; // far past the table
+    // scrolling inside the table keeps it pinned right under the letters
+    s.grid.scrollTop = 100; // table rows end at 26+7*26=208
     s.grid.dispatchEvent(new Event("scroll"));
-    expect(band.getAttribute("style")).toContain("display:none");
+    expect(headerRow.getAttribute("style")).toContain("top:26px");
+
+    // near the table's end it slides up under the letters row, like Sheets
+    s.grid.scrollTop = 170; // 208 - 170 - 26 = 12
+    s.grid.dispatchEvent(new Event("scroll"));
+    expect(headerRow.getAttribute("style")).toContain("top:12px");
+
+    s.grid.scrollTop = 1000; // far past the table — off-screen
+    s.grid.dispatchEvent(new Event("scroll"));
+    expect(headerRow.getAttribute("style")).toContain("top:-818px");
     s.dispose();
   });
 

@@ -4,6 +4,7 @@
 
 import { Behavior } from "@continuum-js/frp";
 import { Show, Dynamic, onMount } from "@continuum-js/dom";
+import { distinctB } from "@continuum-js/std";
 import type { Events } from "@continuum-js/dom";
 import {
   COLS,
@@ -55,8 +56,31 @@ export function Grid(props: {
     </div>
   ));
 
+  // A row that carries a table's header is position:sticky — the WHOLE row
+  // pins (its number included), and near the table's end the shrinking top
+  // offset slides it up under the letters row, exactly like Sheets. z-index
+  // 27: above other rows' number cells (26), under the letters row (28).
+  const rowStyle = (r: number) =>
+    distinctB(
+      Behavior.lift3(
+        (ts, hs, st) => {
+          const base = `height:var(--h${r})`;
+          const t = ts.find((x) => x.anchor.r === r);
+          if (!t) return base;
+          const end =
+            HEAD_H +
+            hs.slice(0, t.anchor.r + t.rows + 1).reduce((a, b) => a + b, 0);
+          const top = Math.min(HEAD_H, end - st - hs[r]);
+          return `${base};position:sticky;top:${top}px;z-index:27`;
+        },
+        props.tables.list,
+        layout.heights,
+        layout.scrollTop,
+      ),
+    );
+
   const rows = Array.from({ length: ROWS }, (_, r) => (
-    <div class="row" style={`height:var(--h${r})`}>
+    <div class="row" style={rowStyle(r)}>
       <div
         class={selection.rect.map((rect) =>
           r >= rect.r1 && r <= rect.r2

@@ -3,6 +3,7 @@
 // and the state of the one global select-dropdown overlay.
 
 import { newBehavior, Behavior } from "@continuum-js/frp";
+import { onCleanup, onMount } from "@continuum-js/dom";
 import { cellId, type Pos } from "../model/sheet.js";
 import {
   TEMPLATES,
@@ -72,6 +73,18 @@ export function createTables(sheet: Sheet, selection: Selection): Tables {
   const [colMenu, setColMenu] = newBehavior<number | null>(null);
   const [optionsEditor, setOptionsEditor] = newBehavior<number | null>(null);
 
+  // any mousedown that no popover swallowed (cells, toolbar, blank space)
+  // dismisses the header menus — the menus and their ▾ toggles stop
+  // propagation. Renaming is left alone: its commit rides the input's blur.
+  onMount(() => {
+    const close = () => {
+      setTableMenuOpen(false);
+      setColMenu(null);
+    };
+    window.addEventListener("mousedown", close);
+    onCleanup(() => window.removeEventListener("mousedown", close));
+  });
+
   const insert = (tpl: Template) => {
     const anchor = selection.anchor.sample();
     sheet.dispatch({
@@ -105,6 +118,7 @@ export function createTables(sheet: Sheet, selection: Selection): Tables {
     tableMenuOpen,
     toggleTableMenu: () => {
       setColMenu(null);
+      setOpenSelect(null); // one popover at a time
       setTableMenuOpen(!tableMenuOpen.sample());
     },
     renaming,
@@ -120,6 +134,7 @@ export function createTables(sheet: Sheet, selection: Selection): Tables {
     colMenu,
     toggleColMenu: (col) => {
       setTableMenuOpen(false);
+      setOpenSelect(null); // one popover at a time
       setColMenu(colMenu.sample() === col ? null : col);
     },
     optionsEditor,

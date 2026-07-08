@@ -18,8 +18,10 @@ const top = (hs: number[], r: number) =>
 
 const HEADER_COLORS = ["#3d5a45", "#0b57d0", "#7b1fa2", "#5f6368", "#a52714"];
 
-// where the header band actually sits: its natural row position, or pinned
-// under the sticky column letters while the table scrolls through
+// where the table's header row visually sits: its natural position, or —
+// since the row itself is position:sticky (see Grid's rowStyle) — pinned
+// under the column letters and pushed out by the table's end. The ▾ buttons,
+// «+» and the menus are absolute overlays, so they follow this same math.
 const bandY = (t: Table, hs: number[], st: number) => {
   const natural = top(hs, t.anchor.r);
   const end = top(hs, t.anchor.r + t.rows + 1);
@@ -103,59 +105,11 @@ export function TableOverlays(props: { tables: Tables; layout: Layout }) {
         }
       </Dynamic>
 
-      {/* pinned header bands: any table scrolling under the column letters */}
-      <Dynamic value={tables.list}>
-        {(list) => list.map((t) => <PinnedBand t={t} {...props} />)}
-      </Dynamic>
-
       {/* everything anchored to the ACTIVE table */}
       <Dynamic value={tables.active}>
         {(t) => (t ? <ActiveTableChrome t={t} {...props} /> : null)}
       </Dynamic>
     </>
-  );
-}
-
-function PinnedBand(props: { t: Table; tables: Tables; layout: Layout }) {
-  const { t, tables, layout } = props;
-  const style = Behavior.lift3(
-    (ws, hs, st) => {
-      const y = bandY(t, hs, st);
-      const natural = top(hs, t.anchor.r);
-      const end = top(hs, t.anchor.r + t.rows + 1);
-      if (y <= natural) return "display:none"; // not pinned — the real row shows
-      if (st + HEAD_H >= end) return "display:none"; // the table has passed
-      const widths = t.columns.map((_, i) => ws[t.anchor.c + i]);
-      const total = widths.reduce((a, b) => a + b, 0);
-      return (
-        `left:${left(ws, t.anchor.c)}px;top:${y}px;` +
-        `width:${total}px;height:${hs[t.anchor.r]}px;` +
-        `background:${t.headerColor ?? "#3d5a45"};` +
-        widths.map((w, i) => `--pb${i}:${w}px`).join(";")
-      );
-    },
-    layout.widths,
-    layout.heights,
-    layout.scrollTop,
-  );
-  return (
-    <div class="pinned-band" style={style}>
-      {t.columns.map((col, i) => (
-        <div
-          class={`pb-cell t-header th-${col.kind}`}
-          style={`flex-basis:var(--pb${i})`}
-        >
-          {col.name}
-          <button
-            class="th-dd pb-dd"
-            onMousedown={(e) => e.stopPropagation()}
-            onClick={() => tables.toggleColMenu(i)}
-          >
-            <IconChevron />
-          </button>
-        </div>
-      ))}
-    </div>
   );
 }
 
@@ -251,16 +205,17 @@ function ActiveTableChrome(props: {
         )}
       </Show>
 
-      {/* ── per-column ▾ buttons on the header band ─────────────────────── */}
+      {/* ── per-column ▾ buttons: they ride the sticky header row ───────── */}
       {t.columns.map((_, i) => (
         <button
           class="th-dd"
-          style={Behavior.lift2(
-            (ws, hs) =>
+          style={Behavior.lift3(
+            (ws, hs, st) =>
               `left:${left(ws, t.anchor.c + i + 1) - 20}px;` +
-              `top:${top(hs, t.anchor.r) + 4}px`,
+              `top:${bandY(t, hs, st) + 4}px`,
             layout.widths,
             layout.heights,
+            layout.scrollTop,
           )}
           onMousedown={(e) => e.stopPropagation()}
           onClick={() => tables.toggleColMenu(i)}
@@ -341,12 +296,13 @@ function ActiveTableChrome(props: {
       <button
         class="tplus"
         title="Добавить столбец справа"
-        style={Behavior.lift2(
-          (ws, hs) =>
+        style={Behavior.lift3(
+          (ws, hs, st) =>
             `left:${left(ws, t.anchor.c + t.columns.length) + 3}px;` +
-            `top:${top(hs, t.anchor.r) + 1}px`,
+            `top:${bandY(t, hs, st) + 1}px`,
           layout.widths,
           layout.heights,
+          layout.scrollTop,
         )}
         onMousedown={(e) => e.stopPropagation()}
         onClick={() => tables.insertColumn(t.id, t.columns.length - 1)}
