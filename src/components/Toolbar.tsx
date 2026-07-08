@@ -78,11 +78,10 @@ export function Toolbar(props: {
 
   // which toolbar dropdown is open (borders / align / overflow)
   const [openDd, setOpenDd] = newBehavior<string | null>(null);
-  onMount(() => {
-    const close = () => setOpenDd(null);
-    window.addEventListener("mousedown", close);
-    onCleanup(() => window.removeEventListener("mousedown", close));
-  });
+  // cleanup registers during build, not inside onMount (no owner there)
+  const closeDd = () => setOpenDd(null);
+  onMount(() => window.addEventListener("mousedown", closeDd));
+  onCleanup(() => window.removeEventListener("mousedown", closeDd));
   const toggleDd = (name: string) =>
     setOpenDd(openDd.sample() === name ? null : name);
 

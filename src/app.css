@@ -1235,3 +1235,17 @@ body {
 .home-list {
   margin: 0 auto;
 }
+
+/* header label must not run under the ▾ button */
+.cell.t-header {
+  padding-right: 26px;
+}
+
+/* a live border around each table, follows resizes and added columns/rows */
+.table-outline {
+  position: absolute;
+  z-index: 5;
+  border: 2px solid;
+  border-radius: 2px;
+  pointer-events: none;
+}

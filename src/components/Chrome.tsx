@@ -43,11 +43,11 @@ export function Chrome(props: {
   onMenuAction: () => void; // e.g. refocus the grid after an item runs
 }) {
   const [openMenu, setOpenMenu] = newBehavior<string | null>(null);
-  onMount(() => {
-    const close = () => setOpenMenu(null);
-    window.addEventListener("mousedown", close);
-    onCleanup(() => window.removeEventListener("mousedown", close));
-  });
+  // NB: cleanup registers during build, not inside onMount — mount callbacks
+  // run without an owner, onCleanup there would throw
+  const closeMenu = () => setOpenMenu(null);
+  onMount(() => window.addEventListener("mousedown", closeMenu));
+  onCleanup(() => window.removeEventListener("mousedown", closeMenu));
 
   const menuBar = props.menus.map((m) => (
     <span

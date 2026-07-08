@@ -75,6 +75,34 @@ export function TableOverlays(props: { tables: Tables; layout: Layout }) {
         }
       </Dynamic>
 
+      {/* a live outline around every table: grows with columns/rows/resizes */}
+      <Dynamic value={tables.list}>
+        {(list) =>
+          list.map((t) => (
+            <div
+              class="table-outline"
+              style={Behavior.lift2(
+                (ws, hs) => {
+                  const w = t.columns.reduce(
+                    (a, _, i) => a + ws[t.anchor.c + i],
+                    0,
+                  );
+                  const h =
+                    top(hs, t.anchor.r + t.rows + 1) - top(hs, t.anchor.r);
+                  return (
+                    `left:${left(ws, t.anchor.c)}px;top:${top(hs, t.anchor.r)}px;` +
+                    `width:${w}px;height:${h}px;` +
+                    `border-color:${t.headerColor ?? "#3d5a45"}`
+                  );
+                },
+                layout.widths,
+                layout.heights,
+              )}
+            ></div>
+          ))
+        }
+      </Dynamic>
+
       {/* pinned header bands: any table scrolling under the column letters */}
       <Dynamic value={tables.list}>
         {(list) => list.map((t) => <PinnedBand t={t} {...props} />)}
