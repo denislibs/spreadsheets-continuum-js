@@ -4,6 +4,7 @@
 
 import { newBehavior, Behavior } from "@continuum-js/frp";
 import { onCleanup } from "@continuum-js/dom";
+import { distinctB } from "@continuum-js/std";
 import type { Events } from "@continuum-js/dom";
 import { persist, loadPersisted } from "@continuum-js/std";
 import { COLS, ROWS } from "../model/sheet.js";
@@ -22,6 +23,10 @@ export interface Layout {
   setZoom: (z: number) => void;
   /** CSS vars + zoom for the grid container */
   gridStyle: Behavior<string>;
+  /** the grid's vertical scroll offset, in CONTENT units (zoom factored out) */
+  scrollTop: Behavior<number>;
+  /** call from the grid's ref: wires the scroll listener into this owner */
+  trackScroll: (el: HTMLElement) => void;
   startColResize: (c: number, e: Events.MouseEvent<HTMLDivElement>) => void;
   startRowResize: (r: number, e: Events.MouseEvent<HTMLDivElement>) => void;
 }
@@ -56,6 +61,11 @@ export function createLayout(): Layout {
   onCleanup(persist(`${LC_KEY}:heights`, heights));
 
   const [zoom, setZoom] = newBehavior(100);
+  const [rawScroll, setRawScroll] = newBehavior(0);
+  // content units: the grid is CSS-zoomed, scroll offsets are not
+  const scrollTop = distinctB(
+    Behavior.lift2((s, z) => Math.round(s / (z / 100)), rawScroll, zoom),
+  );
 
   const gridStyle = Behavior.lift3(
     (ws, hs, z) =>
@@ -73,6 +83,12 @@ export function createLayout(): Layout {
     heights,
     setZoom,
     gridStyle,
+    scrollTop,
+    trackScroll: (el) => {
+      const onScroll = () => setRawScroll(el.scrollTop);
+      el.addEventListener("scroll", onScroll, { passive: true });
+      onCleanup(() => el.removeEventListener("scroll", onScroll));
+    },
     startColResize: (c, e) => {
       const w0 = widths.sample()[c];
       drag(e, (dx) => {

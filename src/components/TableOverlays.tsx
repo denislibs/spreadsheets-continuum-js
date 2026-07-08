@@ -4,12 +4,12 @@
 // chip. Everything positions itself by prefix sums over the dynamic
 // widths/heights and rebuilds via Dynamic when the active table changes.
 
-import { Behavior } from "@continuum-js/frp";
+import { Behavior, newBehavior } from "@continuum-js/frp";
 import { Show, Dynamic } from "@continuum-js/dom";
 import type { Tables } from "../composables/createTables.js";
-import type { Table, ColumnKind } from "../model/tables.js";
+import type { Table, ColumnKind, SelectOption } from "../model/tables.js";
 import { HEAD_W, HEAD_H, type Layout } from "../composables/createLayout.js";
-import { IconChevron, IconPlus } from "../icons.js";
+import { IconChevron, IconPlus, IconClose } from "../icons.js";
 
 const left = (ws: number[], c: number) =>
   HEAD_W + ws.slice(0, c).reduce((a, b) => a + b, 0);
@@ -17,6 +17,14 @@ const top = (hs: number[], r: number) =>
   HEAD_H + hs.slice(0, r).reduce((a, b) => a + b, 0);
 
 const HEADER_COLORS = ["#3d5a45", "#0b57d0", "#7b1fa2", "#5f6368", "#a52714"];
+
+// where the header band actually sits: its natural row position, or pinned
+// under the sticky column letters while the table scrolls through
+const bandY = (t: Table, hs: number[], st: number) => {
+  const natural = top(hs, t.anchor.r);
+  const end = top(hs, t.anchor.r + t.rows + 1);
+  return Math.min(Math.max(natural, st + HEAD_H), end - hs[t.anchor.r]);
+};
 
 const KINDS: Array<[ColumnKind, string]> = [
   ["text", "Текст"],
@@ -67,11 +75,58 @@ export function TableOverlays(props: { tables: Tables; layout: Layout }) {
         }
       </Dynamic>
 
+      {/* pinned header bands: any table scrolling under the column letters */}
+      <Dynamic value={tables.list}>
+        {(list) => list.map((t) => <PinnedBand t={t} {...props} />)}
+      </Dynamic>
+
       {/* everything anchored to the ACTIVE table */}
       <Dynamic value={tables.active}>
         {(t) => (t ? <ActiveTableChrome t={t} {...props} /> : null)}
       </Dynamic>
     </>
+  );
+}
+
+function PinnedBand(props: { t: Table; tables: Tables; layout: Layout }) {
+  const { t, tables, layout } = props;
+  const style = Behavior.lift3(
+    (ws, hs, st) => {
+      const y = bandY(t, hs, st);
+      const natural = top(hs, t.anchor.r);
+      const end = top(hs, t.anchor.r + t.rows + 1);
+      if (y <= natural) return "display:none"; // not pinned — the real row shows
+      if (st + HEAD_H >= end) return "display:none"; // the table has passed
+      const widths = t.columns.map((_, i) => ws[t.anchor.c + i]);
+      return (
+        `left:${left(ws, t.anchor.c)}px;top:${y}px;` +
+        `height:${hs[t.anchor.r]}px;` +
+        `background:${t.headerColor ?? "#3d5a45"};` +
+        widths.map((w, i) => `--pb${i}:${w}px`).join(";")
+      );
+    },
+    layout.widths,
+    layout.heights,
+    layout.scrollTop,
+  );
+  return (
+    <div class="pinned-band" style={style}>
+      {t.columns.map((col, i) => (
+        <div
+          class={`pb-cell t-header th-${col.kind}`}
+          style={`flex-basis:var(--pb${i})`}
+        >
+          {col.name}
+          <button
+            class="th-dd pb-dd"
+            onMousedown={(e) => e.stopPropagation()}
+            onClick={() => tables.toggleColMenu(i)}
+          >
+            <IconChevron />
+          </button>
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -82,10 +137,11 @@ function ActiveTableChrome(props: {
 }) {
   const { t, tables, layout } = props;
   const at = (c: number, dTop: number) =>
-    Behavior.lift2(
-      (ws, hs) => `left:${left(ws, c)}px;top:${top(hs, t.anchor.r) + dTop}px`,
+    Behavior.lift3(
+      (ws, hs, st) => `left:${left(ws, c)}px;top:${bandY(t, hs, st) + dTop}px`,
       layout.widths,
       layout.heights,
+      layout.scrollTop,
     );
 
   return (
@@ -198,6 +254,23 @@ function ActiveTableChrome(props: {
                   {label}
                 </button>
               ))}
+              <Show
+                when={tables.colMenu.map(
+                  () => t.columns[col].kind === "select",
+                )}
+              >
+                {() => (
+                  <>
+                    <div class="dd-sep"></div>
+                    <button
+                      class="dd-item"
+                      onClick={() => tables.openOptionsEditor(col)}
+                    >
+                      Изменить варианты…
+                    </button>
+                  </>
+                )}
+              </Show>
               <div class="dd-sep"></div>
               <button
                 class="dd-item"
@@ -246,6 +319,13 @@ function ActiveTableChrome(props: {
         <IconPlus />
       </button>
 
+      {/* ── the select-options editor («Правила проверки данных») ───────── */}
+      <Dynamic value={tables.optionsEditor}>
+        {(col) =>
+          col !== null && <OptionsEditor t={t} col={col} tables={tables} />
+        }
+      </Dynamic>
+
       {/* ── «добавить строки» under the table ───────────────────────────── */}
       <div
         class="add-rows"
@@ -266,5 +346,107 @@ function ActiveTableChrome(props: {
         </button>
       </div>
     </>
+  );
+}
+
+const PALETTE = [
+  "#d4edbc",
+  "#ffe5a0",
+  "#bfe1f6",
+  "#ffcfc9",
+  "#e6e6e6",
+  "#c9b8f9",
+];
+
+function OptionsEditor(props: { t: Table; col: number; tables: Tables }) {
+  const { t, col, tables } = props;
+  // a local draft: edits accumulate here, «Готово» dispatches ONE action
+  const [draft, setDraft] = newBehavior<SelectOption[]>(
+    (t.columns[col].options ?? []).map((o) => ({ ...o })),
+  );
+  const update = (i: number, patch: Partial<SelectOption>) =>
+    setDraft(draft.sample().map((o, j) => (j === i ? { ...o, ...patch } : o)));
+
+  return (
+    <aside class="tables-panel opts" onMousedown={(e) => e.stopPropagation()}>
+      <div class="tp-head">
+        <span class="tp-title">Правила проверки данных</span>
+        <button
+          class="tool"
+          title="Закрыть"
+          onClick={tables.closeOptionsEditor}
+        >
+          <IconClose />
+        </button>
+      </div>
+      <p class="tp-desc">
+        Применить к столбцу:{" "}
+        <b>
+          {t.name}[{t.columns[col].name}]
+        </b>
+      </p>
+      <Dynamic value={draft}>
+        {(opts) => (
+          <div class="opts-list">
+            {opts.map((o, i) => (
+              <div class="opts-row">
+                <label class="opts-color" style={`background:${o.color}`}>
+                  <input
+                    type="color"
+                    value={o.color}
+                    onInput={(e) => update(i, { color: e.currentTarget.value })}
+                  />
+                </label>
+                <input
+                  class="opts-label"
+                  value={o.label}
+                  onInput={(e) => update(i, { label: e.currentTarget.value })}
+                />
+                <button
+                  class="tool"
+                  title="Удалить вариант"
+                  onClick={() =>
+                    setDraft(draft.sample().filter((_, j) => j !== i))
+                  }
+                >
+                  <IconClose />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </Dynamic>
+      <button
+        class="opts-add"
+        onClick={() =>
+          setDraft([
+            ...draft.sample(),
+            {
+              label: `Вариант ${draft.sample().length + 1}`,
+              color: PALETTE[draft.sample().length % PALETTE.length],
+            },
+          ])
+        }
+      >
+        Добавить объект
+      </button>
+      <div class="opts-actions">
+        <button class="opts-cancel" onClick={tables.closeOptionsEditor}>
+          Отмена
+        </button>
+        <button
+          class="opts-done"
+          onClick={() =>
+            tables.setOptions(
+              t.id,
+              col,
+              draft.sample().filter((o) => o.label.trim()),
+            )
+          }
+        >
+          Готово
+        </button>
+      </div>
+    </aside>
   );
 }

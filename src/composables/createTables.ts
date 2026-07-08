@@ -25,6 +25,8 @@ export interface OpenSelect {
 
 export interface Tables {
   templates: Template[];
+  /** all tables (for pinned header bands) */
+  list: Behavior<Table[]>;
   /** cellId → what the table system wants this cell to look like */
   presentation: Behavior<Map<string, CellPresentation>>;
   /** the table containing the selection anchor, if any */
@@ -47,6 +49,11 @@ export interface Tables {
   commitRename: (id: string, name: string) => void;
   colMenu: Behavior<number | null>;
   toggleColMenu: (col: number) => void;
+  /** the select-options editor panel («Правила проверки данных») */
+  optionsEditor: Behavior<number | null>;
+  openOptionsEditor: (col: number) => void;
+  closeOptionsEditor: () => void;
+  setOptions: (id: string, at: number, options: SelectOption[]) => void;
   closeMenus: () => void;
   rename: (id: string, name: string) => void;
   setColor: (id: string, color: string) => void;
@@ -63,6 +70,7 @@ export function createTables(sheet: Sheet, selection: Selection): Tables {
   const [tableMenuOpen, setTableMenuOpen] = newBehavior(false);
   const [renaming, setRenaming] = newBehavior(false);
   const [colMenu, setColMenu] = newBehavior<number | null>(null);
+  const [optionsEditor, setOptionsEditor] = newBehavior<number | null>(null);
 
   const insert = (tpl: Template) => {
     const anchor = selection.anchor.sample();
@@ -75,6 +83,7 @@ export function createTables(sheet: Sheet, selection: Selection): Tables {
 
   return {
     templates: TEMPLATES,
+    list: sheet.tables,
     presentation: sheet.tables.map(presentationOf),
     active: Behavior.lift2(
       (ts, a) => tableAt(ts, a),
@@ -112,6 +121,16 @@ export function createTables(sheet: Sheet, selection: Selection): Tables {
     toggleColMenu: (col) => {
       setTableMenuOpen(false);
       setColMenu(colMenu.sample() === col ? null : col);
+    },
+    optionsEditor,
+    openOptionsEditor: (col) => {
+      setColMenu(null);
+      setOptionsEditor(col);
+    },
+    closeOptionsEditor: () => setOptionsEditor(null),
+    setOptions: (id, at, options) => {
+      sheet.dispatch({ type: "setColumnOptions", id, at, options });
+      setOptionsEditor(null);
     },
     closeMenus: () => {
       setTableMenuOpen(false);

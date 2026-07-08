@@ -48,6 +48,9 @@ export function makeKeyHandlers(
     } else if ((e.metaKey || e.ctrlKey) && FORMAT_KEYS[k]) {
       e.preventDefault();
       fmt.toggle(FORMAT_KEYS[k]);
+    } else if ((e.metaKey || e.ctrlKey) && k === "k") {
+      e.preventDefault();
+      editor.start("https://");
     } else if ((e.metaKey || e.ctrlKey) && k === "z") {
       e.preventDefault();
       sheet.dispatch({ type: e.shiftKey ? "redo" : "undo" });

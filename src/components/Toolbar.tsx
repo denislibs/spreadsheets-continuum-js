@@ -334,7 +334,14 @@ export function Toolbar(props: {
               onMousedown={(e) => e.stopPropagation()}
             >
               <div class="more-row">
-                <button class="tool" title="Вставить ссылку" disabled>
+                <button
+                  class="tool"
+                  title="Вставить ссылку (Ctrl+K)"
+                  onClick={() => {
+                    editor.start("https://");
+                    setOpenDd(null);
+                  }}
+                >
                   <IconLink />
                 </button>
                 <button class="tool" title="Комментарий" disabled>

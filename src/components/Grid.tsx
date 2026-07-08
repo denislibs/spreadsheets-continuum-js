@@ -3,7 +3,7 @@
 // (text, selection class, format style), and the editor overlay.
 
 import { Behavior } from "@continuum-js/frp";
-import { Show, onMount } from "@continuum-js/dom";
+import { Show, Dynamic, onMount } from "@continuum-js/dom";
 import type { Events } from "@continuum-js/dom";
 import {
   COLS,
@@ -11,6 +11,7 @@ import {
   cellId,
   display,
   inRect,
+  isUrl,
   styleOf,
 } from "../model/sheet.js";
 import { optionColor } from "../model/tables.js";
@@ -32,7 +33,7 @@ export function Grid(props: {
   onEditorKeydown: (e: Events.KeyboardEvent<HTMLInputElement>) => void;
   gridRef: (el: HTMLDivElement) => void;
 }) {
-  const { selection, editor, layout } = props;
+  const { sheet, selection, editor, layout } = props;
 
   const headerCells = Array.from({ length: COLS }, (_, c) => (
     <div
@@ -85,7 +86,10 @@ export function Grid(props: {
       class="grid"
       tabindex={0}
       style={layout.gridStyle}
-      ref={props.gridRef}
+      ref={(el) => {
+        props.gridRef(el);
+        layout.trackScroll(el);
+      }}
       onKeydown={props.onKeydown}
     >
       <div class="row" style={`height:${HEAD_H}px`}>
@@ -95,6 +99,39 @@ export function Grid(props: {
       {rows}
 
       <TableOverlays tables={props.tables} layout={layout} />
+
+      {/* the link chip: a real <a> under the selected cell's URL */}
+      <Dynamic
+        value={Behavior.lift2(
+          (a, m) => {
+            const v = m.get(cellId(a.c, a.r));
+            return isUrl(v) ? { pos: a, url: String(v) } : null;
+          },
+          selection.anchor,
+          sheet.computed,
+        )}
+      >
+        {(l) =>
+          l && (
+            <a
+              class="link-chip"
+              href={l.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={Behavior.lift2(
+                (ws, hs) =>
+                  `left:${HEAD_W + ws.slice(0, l.pos.c).reduce((a2, b) => a2 + b, 0)}px;` +
+                  `top:${HEAD_H + hs.slice(0, l.pos.r + 1).reduce((a2, b) => a2 + b, 0) + 2}px`,
+                layout.widths,
+                layout.heights,
+              )}
+              onMousedown={(e) => e.stopPropagation()}
+            >
+              Открыть: {l.url.length > 40 ? l.url.slice(0, 40) + "…" : l.url}
+            </a>
+          )
+        }
+      </Dynamic>
 
       <Show when={editor.editing}>
         {() => (
@@ -171,6 +208,8 @@ function Cell(props: {
     selection.rect,
     pres,
   );
+  // URL values render as links (see the .t-link style + the LinkChip overlay)
+  const isLink = sheet.computed.map((m) => isUrl(m.get(id)));
   // format layer + the table layer (header band, status chip colors)
   const style = Behavior.lift3(
     (f, p, m) => {
@@ -191,7 +230,7 @@ function Cell(props: {
 
   return (
     <div
-      class={cls}
+      class={Behavior.lift2((s, l) => (l ? s + " t-link" : s), cls, isLink)}
       data-id={id}
       style={style}
       onMousedown={(e) => {

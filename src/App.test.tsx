@@ -344,7 +344,7 @@ describe("structured tables", () => {
 
     key(s.grid, "z", { ctrlKey: true }); // undo add-rows
     key(s.grid, "z", { ctrlKey: true }); // undo the table itself
-    expect(s.container.querySelectorAll(".t-header").length).toBe(0);
+    expect(s.container.querySelectorAll(".cell.t-header").length).toBe(0);
     s.dispose();
   });
 });
@@ -438,9 +438,11 @@ describe("table chrome", () => {
   test("«+» inserts a column at the right edge of the table", () => {
     const s = setup();
     insertUsers(s);
-    const before = s.container.querySelectorAll(".t-header").length;
+    const before = s.container.querySelectorAll(".cell.t-header").length;
     (s.container.querySelector(".tplus") as HTMLButtonElement).click();
-    expect(s.container.querySelectorAll(".t-header").length).toBe(before + 1);
+    expect(s.container.querySelectorAll(".cell.t-header").length).toBe(
+      before + 1,
+    );
     expect(s.container.textContent).toContain("Столбец 7");
     s.dispose();
   });
@@ -495,6 +497,81 @@ describe("table chrome", () => {
       ) as HTMLButtonElement
     ).click();
     expect(s.cell("B2").className).toContain("t-select");
+    s.dispose();
+  });
+});
+
+describe("sticky band, options editor, links", () => {
+  const insertUsers2 = (s: ReturnType<typeof setup>) => {
+    const m = [...s.container.querySelectorAll(".menu-item")].find(
+      (x) => x.textContent === "Вставка",
+    )!;
+    m.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    (
+      [...s.container.querySelectorAll(".dd-item")].find(
+        (b) => b.textContent === "Таблицы",
+      ) as HTMLButtonElement
+    ).click();
+    (
+      [...s.container.querySelectorAll(".tp-item")].find((b) =>
+        b.textContent!.includes("Пользователи"),
+      ) as HTMLButtonElement
+    ).click();
+  };
+
+  test("the header band pins under the letters while scrolling through", () => {
+    const s = setup();
+    insertUsers2(s);
+    const band = s.container.querySelector(".pinned-band") as HTMLElement;
+    expect(band.getAttribute("style")).toContain("display:none"); // not scrolled
+
+    s.grid.scrollTop = 100; // inside the table (rows end at 26+7*26=208)
+    s.grid.dispatchEvent(new Event("scroll"));
+    expect(band.getAttribute("style")).toContain("top:126px"); // 100 + letters
+
+    s.grid.scrollTop = 1000; // far past the table
+    s.grid.dispatchEvent(new Event("scroll"));
+    expect(band.getAttribute("style")).toContain("display:none");
+    s.dispose();
+  });
+
+  test("the options editor rewrites a select column's choices as one action", () => {
+    const s = setup();
+    insertUsers2(s);
+    (s.container.querySelectorAll(".th-dd")[2] as HTMLButtonElement).click(); // «Статус»
+    (
+      [...s.container.querySelectorAll(".colmenu .dd-item")].find(
+        (b) => b.textContent === "Изменить варианты…",
+      ) as HTMLButtonElement
+    ).click();
+
+    const label = s.container.querySelector(".opts-label") as HTMLInputElement;
+    label.value = "Подходит";
+    label.dispatchEvent(new Event("input", { bubbles: true }));
+    (s.container.querySelector(".opts-done") as HTMLButtonElement).click();
+
+    s.cell("C2").dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    expect(s.container.querySelector(".select-dd")!.textContent).toContain(
+      "Подходит",
+    );
+    s.dispose();
+  });
+
+  test("a URL value renders as a link with an open-chip for the anchor", () => {
+    const s = setup();
+    key(s.grid, "h");
+    s.typeInto("https://continuum.dev/docs");
+    key(s.grid, "ArrowUp"); // back to A1
+    expect(s.cell("A1").className).toContain("t-link");
+    const chip = s.container.querySelector(".link-chip") as HTMLAnchorElement;
+    expect(chip.href).toBe("https://continuum.dev/docs");
+    s.dispose();
+  });
+
+  test("Ctrl+K starts the editor with a URL draft", () => {
+    const s = setup();
+    key(s.grid, "k", { ctrlKey: true });
+    expect(s.editor()!.value).toBe("https://");
     s.dispose();
   });
 });

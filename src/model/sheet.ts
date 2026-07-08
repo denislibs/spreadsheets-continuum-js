@@ -169,6 +169,10 @@ export function styleOf(f: CellFormat | undefined): string {
   return out.join(";");
 }
 
+/** Does this computed value look like a hyperlink? */
+export const isUrl = (v: Computed | undefined): boolean =>
+  typeof v === "string" && /^https?:\/\/\S+$/i.test(v);
+
 /** How a computed value is shown, number format applied. */
 export function display(
   v: Computed | undefined,
@@ -185,7 +189,7 @@ export function display(
 
 // ── actions and the reducer ─────────────────────────────────────────────────
 
-import type { ColumnKind, Table } from "./tables.js";
+import type { ColumnKind, SelectOption, Table } from "./tables.js";
 import {
   insertColumnRight,
   removeColumn,
@@ -205,6 +209,12 @@ export type Action =
   | { type: "setTableColor"; id: string; color: string }
   | { type: "removeTable"; id: string }
   | { type: "setColumnKind"; id: string; at: number; kind: ColumnKind }
+  | {
+      type: "setColumnOptions";
+      id: string;
+      at: number;
+      options: SelectOption[];
+    }
   | { type: "insertTableColumn"; id: string; at: number }
   | { type: "removeTableColumn"; id: string; at: number }
   | { type: "sortTable"; id: string; at: number; dir: "asc" | "desc" }
@@ -323,6 +333,19 @@ export function reduce(a: Action, s: SheetState): SheetState {
       return push(s, {
         tables: s.tables.map((t) =>
           t.id === a.id ? withKind(t, a.at, a.kind) : t,
+        ),
+      });
+    case "setColumnOptions":
+      return push(s, {
+        tables: s.tables.map((t) =>
+          t.id === a.id
+            ? {
+                ...t,
+                columns: t.columns.map((col, i) =>
+                  i === a.at ? { ...col, options: a.options } : col,
+                ),
+              }
+            : t,
         ),
       });
     case "insertTableColumn": {
