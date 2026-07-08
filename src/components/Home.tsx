@@ -60,25 +60,27 @@ export function Home() {
       </header>
 
       <section class="home-create">
-        <h2>Создать таблицу</h2>
-        <div class="tpl-row">
-          <button class="tpl-card" onClick={() => create()}>
-            <div class="tpl-preview blank">
-              <span class="tpl-plus">+</span>
-            </div>
-            <span class="tpl-name">Пустая таблица</span>
-          </button>
-          {TEMPLATES.filter((t) => t.name !== "Пустая таблица").map((tpl) => (
-            <button class="tpl-card" onClick={() => create(tpl)}>
-              <div class="tpl-preview">
-                <div class="tpl-band"></div>
-                <div class="tpl-line"></div>
-                <div class="tpl-line"></div>
-                <div class="tpl-line short"></div>
+        <div class="home-create-inner">
+          <h2>Создать таблицу</h2>
+          <div class="tpl-row">
+            <button class="tpl-card" onClick={() => create()}>
+              <div class="tpl-preview blank">
+                <span class="tpl-plus">+</span>
               </div>
-              <span class="tpl-name">{tpl.name}</span>
+              <span class="tpl-name">Пустая таблица</span>
             </button>
-          ))}
+            {TEMPLATES.filter((t) => t.name !== "Пустая таблица").map((tpl) => (
+              <button class="tpl-card" onClick={() => create(tpl)}>
+                <div class="tpl-preview">
+                  <div class="tpl-band"></div>
+                  <div class="tpl-line"></div>
+                  <div class="tpl-line"></div>
+                  <div class="tpl-line short"></div>
+                </div>
+                <span class="tpl-name">{tpl.name}</span>
+              </button>
+            ))}
+          </div>
         </div>
       </section>
 

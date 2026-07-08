@@ -1225,3 +1225,13 @@ body {
   padding: 60px;
   text-align: center;
 }
+
+/* center the create strip (and keep the list aligned with it) */
+.home-create-inner {
+  width: fit-content;
+  margin: 0 auto;
+}
+
+.home-list {
+  margin: 0 auto;
+}
