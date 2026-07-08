@@ -416,3 +416,85 @@ describe("sheets toolbar", () => {
     s.dispose();
   });
 });
+
+describe("table chrome", () => {
+  const insertUsers = (s: ReturnType<typeof setup>) => {
+    const insertMenu = [...s.container.querySelectorAll(".menu-item")].find(
+      (m) => m.textContent === "Вставка",
+    )!;
+    insertMenu.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    (
+      [...s.container.querySelectorAll(".dd-item")].find(
+        (b) => b.textContent === "Таблицы",
+      ) as HTMLButtonElement
+    ).click();
+    (
+      [...s.container.querySelectorAll(".tp-item")].find((b) =>
+        b.textContent!.includes("Пользователи"),
+      ) as HTMLButtonElement
+    ).click();
+  };
+
+  test("«+» inserts a column at the right edge of the table", () => {
+    const s = setup();
+    insertUsers(s);
+    const before = s.container.querySelectorAll(".t-header").length;
+    (s.container.querySelector(".tplus") as HTMLButtonElement).click();
+    expect(s.container.querySelectorAll(".t-header").length).toBe(before + 1);
+    expect(s.container.textContent).toContain("Столбец 7");
+    s.dispose();
+  });
+
+  test("the column menu sorts the table's data rows", () => {
+    const s = setup();
+    insertUsers(s);
+    // fill «Имя» for two rows out of order
+    s.cell("A2").dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    key(s.grid, "Б");
+    s.typeInto("Борис");
+    key(s.grid, "А");
+    s.typeInto("Аня");
+
+    (s.container.querySelectorAll(".th-dd")[0] as HTMLButtonElement).click();
+    (
+      [...s.container.querySelectorAll(".colmenu .dd-item")].find((b) =>
+        b.textContent!.includes("А → Я"),
+      ) as HTMLButtonElement
+    ).click();
+
+    expect(s.cell("A2").textContent).toBe("Аня");
+    expect(s.cell("A3").textContent).toBe("Борис");
+    s.dispose();
+  });
+
+  test("the name chip renames the table through its menu", () => {
+    const s = setup();
+    insertUsers(s);
+    (s.container.querySelector(".tname-dd") as HTMLButtonElement).click();
+    (
+      [...s.container.querySelectorAll(".tmenu .dd-item")].find(
+        (b) => b.textContent === "Переименовать таблицу",
+      ) as HTMLButtonElement
+    ).click();
+    const input = s.container.querySelector(".tname-input") as HTMLInputElement;
+    input.value = "Команда";
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }));
+    expect(s.container.querySelector(".tname")!.textContent).toContain(
+      "Команда",
+    );
+    s.dispose();
+  });
+
+  test("changing a column type to select brings the chip dropdown", () => {
+    const s = setup();
+    insertUsers(s);
+    (s.container.querySelectorAll(".th-dd")[1] as HTMLButtonElement).click(); // «Роль»
+    (
+      [...s.container.querySelectorAll(".colmenu .dd-item")].find(
+        (b) => b.textContent === "Раскрывающийся список",
+      ) as HTMLButtonElement
+    ).click();
+    expect(s.cell("B2").className).toContain("t-select");
+    s.dispose();
+  });
+});

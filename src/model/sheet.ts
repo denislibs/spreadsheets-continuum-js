@@ -185,7 +185,13 @@ export function display(
 
 // ── actions and the reducer ─────────────────────────────────────────────────
 
-import type { Table } from "./tables.js";
+import type { ColumnKind, Table } from "./tables.js";
+import {
+  insertColumnRight,
+  removeColumn,
+  sortByColumn,
+  withKind,
+} from "./tableOps.js";
 
 export type Action =
   | { type: "edit"; id: CellId; raw: string }
@@ -195,6 +201,13 @@ export type Action =
   | { type: "formatCells"; entries: Array<[CellId, Partial<CellFormat>]> }
   | { type: "addTable"; table: Table }
   | { type: "addTableRows"; id: string; count: number }
+  | { type: "renameTable"; id: string; name: string }
+  | { type: "setTableColor"; id: string; color: string }
+  | { type: "removeTable"; id: string }
+  | { type: "setColumnKind"; id: string; at: number; kind: ColumnKind }
+  | { type: "insertTableColumn"; id: string; at: number }
+  | { type: "removeTableColumn"; id: string; at: number }
+  | { type: "sortTable"; id: string; at: number; dir: "asc" | "desc" }
   | { type: "undo" }
   | { type: "redo" }
   | { type: "replace"; cells: Raw; formats: Formats; tables?: Table[] };
@@ -292,6 +305,49 @@ export function reduce(a: Action, s: SheetState): SheetState {
           t.id === a.id ? { ...t, rows: t.rows + a.count } : t,
         ),
       });
+    case "renameTable":
+      return push(s, {
+        tables: s.tables.map((t) =>
+          t.id === a.id ? { ...t, name: a.name } : t,
+        ),
+      });
+    case "setTableColor":
+      return push(s, {
+        tables: s.tables.map((t) =>
+          t.id === a.id ? { ...t, headerColor: a.color } : t,
+        ),
+      });
+    case "removeTable":
+      return push(s, { tables: s.tables.filter((t) => t.id !== a.id) });
+    case "setColumnKind":
+      return push(s, {
+        tables: s.tables.map((t) =>
+          t.id === a.id ? withKind(t, a.at, a.kind) : t,
+        ),
+      });
+    case "insertTableColumn": {
+      const t = s.tables.find((x) => x.id === a.id);
+      if (!t) return s;
+      const res = insertColumnRight(t, s.cells, a.at);
+      return push(s, {
+        cells: res.cells,
+        tables: s.tables.map((x) => (x.id === a.id ? res.table : x)),
+      });
+    }
+    case "removeTableColumn": {
+      const t = s.tables.find((x) => x.id === a.id);
+      if (!t) return s;
+      const res = removeColumn(t, s.cells, a.at);
+      return push(s, {
+        cells: res.cells,
+        tables: s.tables.map((x) => (x.id === a.id ? res.table : x)),
+      });
+    }
+    case "sortTable": {
+      const t = s.tables.find((x) => x.id === a.id);
+      if (!t) return s;
+      return push(s, { cells: sortByColumn(t, s.cells, a.at, a.dir) });
+    }
     case "undo": {
       const prev = s.past.at(-1);
       if (!prev) return s;

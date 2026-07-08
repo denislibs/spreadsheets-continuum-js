@@ -20,6 +20,7 @@ export interface TableColumn {
 }
 
 export interface Table {
+  headerColor?: string;
   id: string;
   name: string;
   anchor: Pos; // the header band row
@@ -153,7 +154,7 @@ export const instantiate = (tpl: Template, anchor: Pos, id: string): Table => ({
 // ── presentation: what a table means for individual cells ──────────────────
 
 export type CellPresentation =
-  | { kind: "header"; label: string; colKind: ColumnKind }
+  | { kind: "header"; label: string; colKind: ColumnKind; color: string }
   | { kind: "select"; options: SelectOption[] }
   | { kind: "person" }
   | { kind: "number" }
@@ -169,6 +170,7 @@ export function presentationOf(tables: Table[]): Map<CellId, CellPresentation> {
         kind: "header",
         label: col.name,
         colKind: col.kind,
+        color: t.headerColor ?? "#3d5a45",
       });
       for (let dr = 1; dr <= t.rows; dr++) {
         const id = cellId(c, t.anchor.r + dr);

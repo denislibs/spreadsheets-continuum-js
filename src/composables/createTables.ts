@@ -13,6 +13,7 @@ import {
   type Table,
   type CellPresentation,
   type SelectOption,
+  type ColumnKind,
 } from "../model/tables.js";
 import type { Sheet } from "./createSheet.js";
 import type { Selection } from "./createSelection.js";
@@ -38,11 +39,30 @@ export interface Tables {
   showSelect: (pos: Pos, options: SelectOption[]) => void;
   choose: (pos: Pos, label: string) => void;
   closeSelect: () => void;
+  /** the table-name chip menu and the per-column header menus */
+  tableMenuOpen: Behavior<boolean>;
+  toggleTableMenu: () => void;
+  renaming: Behavior<boolean>;
+  startRename: () => void;
+  commitRename: (id: string, name: string) => void;
+  colMenu: Behavior<number | null>;
+  toggleColMenu: (col: number) => void;
+  closeMenus: () => void;
+  rename: (id: string, name: string) => void;
+  setColor: (id: string, color: string) => void;
+  remove: (id: string) => void;
+  setKind: (id: string, at: number, kind: ColumnKind) => void;
+  insertColumn: (id: string, at: number) => void;
+  removeColumn: (id: string, at: number) => void;
+  sort: (id: string, at: number, dir: "asc" | "desc") => void;
 }
 
 export function createTables(sheet: Sheet, selection: Selection): Tables {
   const [panelOpen, setPanelOpen] = newBehavior(false);
   const [openSelect, setOpenSelect] = newBehavior<OpenSelect | null>(null);
+  const [tableMenuOpen, setTableMenuOpen] = newBehavior(false);
+  const [renaming, setRenaming] = newBehavior(false);
+  const [colMenu, setColMenu] = newBehavior<number | null>(null);
 
   const insert = (tpl: Template) => {
     const anchor = selection.anchor.sample();
@@ -73,5 +93,55 @@ export function createTables(sheet: Sheet, selection: Selection): Tables {
       setOpenSelect(null);
     },
     closeSelect: () => setOpenSelect(null),
+    tableMenuOpen,
+    toggleTableMenu: () => {
+      setColMenu(null);
+      setTableMenuOpen(!tableMenuOpen.sample());
+    },
+    renaming,
+    startRename: () => {
+      setTableMenuOpen(false);
+      setRenaming(true);
+    },
+    commitRename: (id, name) => {
+      if (name.trim())
+        sheet.dispatch({ type: "renameTable", id, name: name.trim() });
+      setRenaming(false);
+    },
+    colMenu,
+    toggleColMenu: (col) => {
+      setTableMenuOpen(false);
+      setColMenu(colMenu.sample() === col ? null : col);
+    },
+    closeMenus: () => {
+      setTableMenuOpen(false);
+      setColMenu(null);
+      setRenaming(false);
+    },
+    rename: (id, name) => sheet.dispatch({ type: "renameTable", id, name }),
+    setColor: (id, color) => {
+      sheet.dispatch({ type: "setTableColor", id, color });
+      setTableMenuOpen(false);
+    },
+    remove: (id) => {
+      sheet.dispatch({ type: "removeTable", id });
+      setTableMenuOpen(false);
+    },
+    setKind: (id, at, kind) => {
+      sheet.dispatch({ type: "setColumnKind", id, at, kind });
+      setColMenu(null);
+    },
+    insertColumn: (id, at) => {
+      sheet.dispatch({ type: "insertTableColumn", id, at });
+      setColMenu(null);
+    },
+    removeColumn: (id, at) => {
+      sheet.dispatch({ type: "removeTableColumn", id, at });
+      setColMenu(null);
+    },
+    sort: (id, at, dir) => {
+      sheet.dispatch({ type: "sortTable", id, at, dir });
+      setColMenu(null);
+    },
   };
 }

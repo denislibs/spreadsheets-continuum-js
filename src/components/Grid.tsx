@@ -164,6 +164,7 @@ function Cell(props: {
       const inSel = inRect(rect, c, r);
       let s = `cell${active ? " active" : inSel ? " in-range" : ""}`;
       if (p) s += ` t-${p.kind}`;
+      if (p?.kind === "header") s += ` th-${p.colKind}`;
       return s;
     },
     selection.anchor,
@@ -174,6 +175,9 @@ function Cell(props: {
   const style = Behavior.lift3(
     (f, p, m) => {
       let extra = styleOf(f.get(id));
+      if (p?.kind === "header") {
+        extra += `${extra ? ";" : ""}background:${p.color}`;
+      }
       if (p?.kind === "select") {
         const color = optionColor(p.options, String(m.get(id) ?? ""));
         if (color) extra += `${extra ? ";" : ""}background:${color}`;
