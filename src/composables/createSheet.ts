@@ -78,20 +78,22 @@ export function createSheet(storageKey: string): Sheet {
     ),
   );
 
-  // cross-tab sync; cleanup registers during build, not inside onMount
-  const onStorage = (e: StorageEvent) => {
-    if (e.key === storageKey && e.newValue) {
-      const p = migrate(JSON.parse(e.newValue));
-      dispatch({
-        type: "replace",
-        cells: fromPlain(p.c),
-        formats: formatsFromPlain(p.f),
-        tables: p.t ?? [],
-      });
-    }
-  };
-  onMount(() => window.addEventListener("storage", onStorage));
-  onCleanup(() => window.removeEventListener("storage", onStorage));
+  // cross-tab sync
+  onMount(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === storageKey && e.newValue) {
+        const p = migrate(JSON.parse(e.newValue));
+        dispatch({
+          type: "replace",
+          cells: fromPlain(p.c),
+          formats: formatsFromPlain(p.f),
+          tables: p.t ?? [],
+        });
+      }
+    };
+    window.addEventListener("storage", onStorage);
+    onCleanup(() => window.removeEventListener("storage", onStorage));
+  });
 
   return {
     actions,

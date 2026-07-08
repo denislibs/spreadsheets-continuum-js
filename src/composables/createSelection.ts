@@ -49,10 +49,11 @@ export function createSelection(): Selection {
     setSel({ anchor: sel.sample().anchor, focus: clamp(p) });
 
   let dragging = false;
-  // cleanup registers during build, not inside onMount (no owner there)
-  const up = () => (dragging = false);
-  onMount(() => window.addEventListener("mouseup", up));
-  onCleanup(() => window.removeEventListener("mouseup", up));
+  onMount(() => {
+    const up = () => (dragging = false);
+    window.addEventListener("mouseup", up);
+    onCleanup(() => window.removeEventListener("mouseup", up));
+  });
 
   return {
     anchor,
