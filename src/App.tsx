@@ -5,12 +5,13 @@
 //              └──────▶ persistence (mirror of the folded value)
 //              └──────▶ cross-tab sync (the `storage` event is one more
 //                       dispatcher into the same reducer)
-// The grid is ~2 500 cells, each with two live bindings (text + selection
-// class) — and no component ever re-runs.
+// Selection is a rectangle {anchor, focus}; column widths, zoom and the
+// document title are plain behaviors (no history worth keeping) with their
+// own persistence mirrors. ~2 500 cells × 2 live bindings, no re-renders.
 
 import { newStream, newBehavior, Behavior } from "@continuum-js/frp";
 import { Show, onCleanup, onMount } from "@continuum-js/dom";
-import type { Events, Reactive } from "@continuum-js/dom";
+import type { Events } from "@continuum-js/dom";
 import { persist, loadPersisted } from "@continuum-js/std";
 import {
   COLS,
@@ -22,18 +23,35 @@ import {
   toPlain,
   fromPlain,
   format,
+  rectOf,
+  inRect,
+  idsInRect,
   type Action,
 } from "./model/sheet.js";
 import { indexToCol } from "./model/formula.js";
 
 const LC_KEY = "continuum-tables";
-const CELL_W = 96;
 const CELL_H = 26;
+const DEFAULT_W = 96;
+const MIN_W = 40;
+const HEAD_W = 48;
 
 interface Pos {
   c: number;
   r: number;
 }
+
+const MENU = [
+  "Файл",
+  "Правка",
+  "Вид",
+  "Вставка",
+  "Формат",
+  "Данные",
+  "Инструменты",
+  "Расширения",
+  "Справка",
+];
 
 export function App() {
   // ── the one stream of actions, folded ─────────────────────────────────────
@@ -46,7 +64,6 @@ export function App() {
   const computed = cells.map(evalSheet);
   const canUndo = state.map((s) => s.past.length > 0);
   const canRedo = state.map((s) => s.future.length > 0);
-  const filled = cells.map((m) => m.size);
 
   // persistence: a mirror of the folded value (plain object for JSON)
   onCleanup(persist(LC_KEY, cells.map(toPlain)));
@@ -62,12 +79,39 @@ export function App() {
     onCleanup(() => window.removeEventListener("storage", onStorage));
   });
 
-  // ── selection and editing (no history worth keeping — plain behaviors) ───
-  const [selected, select] = newBehavior<Pos>({ c: 0, r: 0 });
+  // ── document chrome state (no history — plain behaviors + mirrors) ───────
+  const [title, setTitle] = newBehavior(
+    loadPersisted(`${LC_KEY}:title`, "Новая таблица"),
+  );
+  onCleanup(persist(`${LC_KEY}:title`, title));
+
+  const [widths, setWidths] = newBehavior<number[]>(
+    loadPersisted(`${LC_KEY}:widths`, Array(COLS).fill(DEFAULT_W)),
+  );
+  onCleanup(persist(`${LC_KEY}:widths`, widths));
+
+  const [zoom, setZoom] = newBehavior(100);
+
+  // column widths reach the 2 500 static cells through CSS variables: ONE
+  // live binding on the grid instead of one per cell
+  const gridStyle = Behavior.lift2(
+    (ws, z) =>
+      ws.map((w, i) => `--w${i}:${w}px`).join(";") + `;zoom:${z / 100}`,
+    widths,
+    zoom,
+  );
+
+  // ── selection: a rectangle {anchor, focus} ────────────────────────────────
+  const [sel, setSel] = newBehavior<{ anchor: Pos; focus: Pos }>({
+    anchor: { c: 0, r: 0 },
+    focus: { c: 0, r: 0 },
+  });
   const [editing, setEditing] = newBehavior(false);
   const [draft, setDraft] = newBehavior("");
 
-  const selectedId = selected.map((p) => cellId(p.c, p.r));
+  const anchor = sel.map((s) => s.anchor);
+  const selRect = sel.map((s) => rectOf(s.anchor, s.focus));
+  const selectedId = anchor.map((p) => cellId(p.c, p.r));
   const rawOfSelected = Behavior.lift2(
     (id, m) => m.get(id) ?? "",
     selectedId,
@@ -80,6 +124,33 @@ export function App() {
     draft,
     rawOfSelected,
   );
+
+  // live aggregates over the selection, like the real thing's bottom bar
+  const aggregates = Behavior.lift2(
+    (rect, m) => {
+      if (rect.c1 === rect.c2 && rect.r1 === rect.r2) return "";
+      const nums = idsInRect(rect)
+        .map((id) => m.get(id))
+        .filter((v): v is number => typeof v === "number");
+      if (nums.length === 0) return "";
+      const sum = nums.reduce((a, b) => a + b, 0);
+      return `Сумма: ${format(sum)} · Среднее: ${format(sum / nums.length)} · Кол-во: ${nums.length}`;
+    },
+    selRect,
+    computed,
+  );
+  const filled = cells.map((m) => m.size);
+
+  const clampPos = (p: Pos): Pos => ({
+    c: Math.min(COLS - 1, Math.max(0, p.c)),
+    r: Math.min(ROWS - 1, Math.max(0, p.r)),
+  });
+  const selectOne = (p: Pos) => {
+    const q = clampPos(p);
+    setSel({ anchor: q, focus: q });
+  };
+  const extendTo = (p: Pos) =>
+    setSel({ anchor: sel.sample().anchor, focus: clampPos(p) });
 
   const startEdit = (initial?: string) => {
     setDraft(initial ?? rawOfSelected.sample());
@@ -94,15 +165,38 @@ export function App() {
       });
       setEditing(false);
     }
-    if (move) moveSelection(move.c, move.r);
+    if (move) {
+      const a = sel.sample().anchor;
+      selectOne({ c: a.c + move.c, r: a.r + move.r });
+    }
   };
   const cancel = () => setEditing(false);
-  const moveSelection = (dc: number, dr: number) => {
-    const p = selected.sample();
-    select({
-      c: Math.min(COLS - 1, Math.max(0, p.c + dc)),
-      r: Math.min(ROWS - 1, Math.max(0, p.r + dr)),
-    });
+
+  // drag state lives at the DOM boundary — nothing renders from it
+  let dragging = false;
+  onMount(() => {
+    const up = () => (dragging = false);
+    window.addEventListener("mouseup", up);
+    onCleanup(() => window.removeEventListener("mouseup", up));
+  });
+
+  // ── column resize: imperative drag at the boundary, one set() per move ───
+  const startResize = (col: number, e: Events.MouseEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const startX = e.clientX;
+    const startW = widths.sample()[col];
+    const move = (ev: MouseEvent) => {
+      const next = [...widths.sample()];
+      next[col] = Math.max(MIN_W, startW + (ev.clientX - startX));
+      setWidths(next);
+    };
+    const up = () => {
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseup", up);
+    };
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", up);
   };
 
   // ── keyboard: navigation on the grid, commit/cancel in the editor ────────
@@ -117,13 +211,19 @@ export function App() {
     if (nav[e.key]) {
       e.preventDefault();
       const d = nav[e.key];
-      moveSelection(d.c, d.r);
+      if (e.shiftKey) {
+        const f = sel.sample().focus;
+        extendTo({ c: f.c + d.c, r: f.r + d.r }); // grow the rectangle
+      } else {
+        const a = sel.sample().anchor;
+        selectOne({ c: a.c + d.c, r: a.r + d.r });
+      }
     } else if (e.key === "Enter" || e.key === "F2") {
       e.preventDefault();
       startEdit();
     } else if (e.key === "Delete" || e.key === "Backspace") {
       e.preventDefault();
-      dispatch({ type: "edit", id: selectedId.sample(), raw: "" });
+      dispatch({ type: "clearRange", ids: idsInRect(selRect.sample()) });
     } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") {
       e.preventDefault();
       dispatch({ type: e.shiftKey ? "redo" : "undo" });
@@ -154,9 +254,12 @@ export function App() {
 
   let gridEl!: HTMLDivElement;
 
-  // ── static grid: built once, kept alive by ~5 000 pinpoint bindings ──────
+  // ── static grid: built once, kept alive by pinpoint bindings ─────────────
   const headerCells = Array.from({ length: COLS }, (_, c) => (
-    <div class="cell head">{indexToCol(c + 1)}</div>
+    <div class="cell head" style={`flex-basis:var(--w${c})`}>
+      {indexToCol(c + 1)}
+      <div class="col-resizer" onMousedown={(e) => startResize(c, e)}></div>
+    </div>
   ));
 
   const rows = Array.from({ length: ROWS }, (_, r) => (
@@ -165,17 +268,31 @@ export function App() {
       {Array.from({ length: COLS }, (_, c) => {
         const id = cellId(c, r);
         const text = computed.map((m) => format(m.get(id)));
-        const cls: Reactive<string> = selected.map((p) =>
-          p.c === c && p.r === r ? "cell active" : "cell",
+        const cls = Behavior.lift2(
+          (s, rect) => {
+            const active = s.anchor.c === c && s.anchor.r === r;
+            const inSel = inRect(rect, c, r);
+            return `cell${active ? " active" : inSel ? " in-range" : ""}`;
+          },
+          sel,
+          selRect,
         );
         return (
           <div
             class={cls}
             data-id={id}
+            style={`flex-basis:var(--w${c})`}
             onMousedown={(e) => {
               e.preventDefault(); // keep focus on the grid
               commit(null);
-              select({ c, r });
+              if (e.shiftKey) extendTo({ c, r });
+              else {
+                dragging = true;
+                selectOne({ c, r });
+              }
+            }}
+            onMouseenter={() => {
+              if (dragging) extendTo({ c, r });
             }}
             onDblclick={() => startEdit()}
           >
@@ -188,32 +305,92 @@ export function App() {
 
   return (
     <div class="app">
-      <header class="toolbar">
-        <span class="logo">Continuum Tables</span>
+      {/* ── row 1: document chrome ─────────────────────────────────────── */}
+      <header class="chrome">
+        <div class="sheets-logo">▦</div>
+        <div class="chrome-main">
+          <div class="title-row">
+            <input
+              class="doc-title"
+              value={title}
+              onInput={(e) => setTitle(e.currentTarget.value)}
+            />
+            <span class="chrome-ico" title="Помеченные">
+              ☆
+            </span>
+            <span class="chrome-ico" title="Перемещено на Диск">
+              ☁
+            </span>
+          </div>
+          <nav class="menubar">
+            {MENU.map((m) => (
+              <span class="menu-item">{m}</span>
+            ))}
+          </nav>
+        </div>
+        <div class="chrome-right">
+          <span class="chrome-ico" title="История версий">
+            ⟲
+          </span>
+          <span class="chrome-ico" title="Комментарии">
+            🗨
+          </span>
+          <button class="share">🔒 Настройки Доступа</button>
+          <div class="avatar" title="Denis">
+            D
+          </div>
+        </div>
+      </header>
+
+      {/* ── row 2: toolbar ─────────────────────────────────────────────── */}
+      <div class="toolbar">
         <button
           class="tool"
-          title="Undo (Ctrl+Z)"
+          title="Отменить (Ctrl+Z)"
           disabled={canUndo.map((v) => !v)}
-          onClick={() => dispatch({ type: "undo" })}
+          onClick={() => {
+            dispatch({ type: "undo" });
+            gridEl.focus();
+          }}
         >
           ↩
         </button>
         <button
           class="tool"
-          title="Redo (Ctrl+Shift+Z)"
+          title="Повторить (Ctrl+Shift+Z)"
           disabled={canRedo.map((v) => !v)}
-          onClick={() => dispatch({ type: "redo" })}
+          onClick={() => {
+            dispatch({ type: "redo" });
+            gridEl.focus();
+          }}
         >
           ↪
         </button>
+        <button class="tool" title="Печать" onClick={() => window.print()}>
+          🖨
+        </button>
+        <select
+          class="zoom"
+          title="Масштаб"
+          onChange={(e) => setZoom(Number(e.currentTarget.value))}
+        >
+          <option value="75">75%</option>
+          <option value="100" selected>
+            100%
+          </option>
+          <option value="125">125%</option>
+          <option value="150">150%</option>
+        </select>
         <span class="hint">=A1+B2 · SUM(A1:B9) · AVG · MIN · MAX · COUNT</span>
-      </header>
+      </div>
 
+      {/* ── row 3: formula bar ─────────────────────────────────────────── */}
       <div class="formula-bar">
         <span class="cell-name">{selectedId}</span>
+        <span class="fx">fx</span>
         <input
           class="formula-input"
-          placeholder="Type a value or =formula"
+          placeholder="Введите значение или =формулу"
           value={barValue}
           onInput={(e) => {
             if (!editing.sample()) setEditing(true);
@@ -226,6 +403,7 @@ export function App() {
       <div
         class="grid"
         tabindex={0}
+        style={gridStyle}
         ref={(el) => (gridEl = el)}
         onKeydown={onGridKeyDown}
       >
@@ -239,15 +417,21 @@ export function App() {
           {() => (
             <input
               class="editor"
-              // derived INSIDE the region that uses it: the region's scope owns
-              // it, so closing the editor disposes it and reopening derives a
-              // fresh one (a component-level derivation would die with its
-              // last listener on the first close). Geometry is arithmetic —
-              // fixed cell metrics, +1 for the sticky headers.
-              style={selected.map(
-                (p) =>
-                  `left:${(p.c + 1) * CELL_W}px;top:${(p.r + 1) * CELL_H}px;` +
-                  `width:${CELL_W}px;height:${CELL_H}px`,
+              // Derived INSIDE the region that uses it: the region's scope
+              // owns it, so closing the editor disposes it and reopening
+              // derives a fresh one. Geometry: widths are dynamic, so the
+              // left offset is a prefix sum (+ the sticky header row/col).
+              style={Behavior.lift2(
+                (p, ws) => {
+                  const left =
+                    HEAD_W + ws.slice(0, p.c).reduce((a, b) => a + b, 0);
+                  return (
+                    `left:${left}px;top:${(p.r + 1) * CELL_H}px;` +
+                    `width:${ws[p.c]}px;height:${CELL_H}px`
+                  );
+                },
+                anchor,
+                widths,
               )}
               value={draft}
               onInput={(e) => setDraft(e.currentTarget.value)}
@@ -265,9 +449,10 @@ export function App() {
       </div>
 
       <footer class="status">
-        <span>cells filled: {filled}</span>
+        <span>Заполнено ячеек: {filled}</span>
         <span class="spacer"></span>
-        <span>persisted to localStorage · open a second tab to see sync</span>
+        <span class="agg">{aggregates}</span>
+        <span>localStorage · вторая вкладка синхронизируется</span>
       </footer>
     </div>
   );

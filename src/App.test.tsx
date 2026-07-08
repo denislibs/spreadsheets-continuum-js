@@ -34,7 +34,7 @@ describe("Continuum Tables", () => {
     expect(heads).toContain("A");
     expect(heads).toContain("Z");
     expect(heads).toContain("1");
-    expect(container.textContent).toContain("cells filled: 0");
+    expect(container.textContent).toContain("Заполнено ячеек: 0");
     dispose();
   });
 
@@ -114,5 +114,73 @@ describe("Continuum Tables", () => {
       container.querySelector<HTMLDivElement>(`[data-id="A1"]`)!.textContent,
     ).toBe("9");
     dispose();
+  });
+});
+
+describe("range selection", () => {
+  test("Shift+Arrow grows the rectangle and the status bar aggregates it", () => {
+    const s = setup();
+    key(s.grid, "1");
+    s.typeInto("1"); // A1, selection moves to A2
+    key(s.grid, "3");
+    s.typeInto("3"); // A2, selection moves to A3
+
+    // back to A1, then extend the selection down over both cells
+    key(s.grid, "ArrowUp");
+    key(s.grid, "ArrowUp");
+    key(s.grid, "ArrowDown", { shiftKey: true });
+
+    expect(s.cell("A1").className).toContain("active");
+    expect(s.cell("A2").className).toContain("in-range");
+    expect(s.container.textContent).toContain("Сумма: 4");
+    expect(s.container.textContent).toContain("Среднее: 2");
+    s.dispose();
+  });
+
+  test("Delete clears the whole range as ONE undo step", () => {
+    const s = setup();
+    key(s.grid, "1");
+    s.typeInto("1");
+    key(s.grid, "2");
+    s.typeInto("2");
+
+    key(s.grid, "ArrowUp");
+    key(s.grid, "ArrowUp");
+    key(s.grid, "ArrowDown", { shiftKey: true });
+    key(s.grid, "Delete");
+    expect(s.cell("A1").textContent).toBe("");
+    expect(s.cell("A2").textContent).toBe("");
+
+    key(s.grid, "z", { ctrlKey: true }); // one Ctrl+Z brings both back
+    expect(s.cell("A1").textContent).toBe("1");
+    expect(s.cell("A2").textContent).toBe("2");
+    s.dispose();
+  });
+
+  test("mouse drag selects a range", () => {
+    const s = setup();
+    s.cell("B2").dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    s.cell("C3").dispatchEvent(new MouseEvent("mouseenter", { bubbles: true }));
+    expect(s.cell("C3").className).toContain("in-range");
+    expect(s.cell("B3").className).toContain("in-range");
+    window.dispatchEvent(new MouseEvent("mouseup"));
+    s.dispose();
+  });
+});
+
+describe("chrome", () => {
+  test("renders the Sheets-style header and an editable title", () => {
+    const s = setup();
+    expect(s.container.textContent).toContain("Файл");
+    expect(s.container.textContent).toContain("Настройки Доступа");
+    const t = s.container.querySelector<HTMLInputElement>(".doc-title")!;
+    expect(t.value).toBe("Новая таблица");
+    s.dispose();
+  });
+
+  test("column resize handles exist on header cells", () => {
+    const s = setup();
+    expect(s.container.querySelectorAll(".col-resizer").length).toBe(26);
+    s.dispose();
   });
 });

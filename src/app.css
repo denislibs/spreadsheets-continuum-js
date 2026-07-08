@@ -186,3 +186,163 @@ body {
 .spacer {
   flex: 1;
 }
+
+/* ── document chrome (row 1) ─────────────────────────────────────────── */
+
+.chrome {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px 4px;
+  background: #fff;
+}
+
+.sheets-logo {
+  width: 30px;
+  height: 40px;
+  border-radius: 4px;
+  background: var(--green);
+  color: #fff;
+  font-size: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.chrome-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.title-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.doc-title {
+  border: 1px solid transparent;
+  border-radius: 4px;
+  font-size: 17px;
+  padding: 1px 6px;
+  width: 220px;
+  outline: none;
+}
+
+.doc-title:hover {
+  border-color: var(--border);
+}
+
+.doc-title:focus {
+  border-color: var(--accent);
+}
+
+.chrome-ico {
+  color: #5f6368;
+  font-size: 14px;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 50%;
+}
+
+.chrome-ico:hover {
+  background: #f1f3f4;
+}
+
+.menubar {
+  display: flex;
+  gap: 2px;
+}
+
+.menu-item {
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 13.5px;
+  cursor: default;
+  user-select: none;
+}
+
+.menu-item:hover {
+  background: #f1f3f4;
+}
+
+.chrome-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.share {
+  border: none;
+  border-radius: 18px;
+  background: #c2e7ff;
+  color: #001d35;
+  font: inherit;
+  font-weight: 500;
+  padding: 8px 16px;
+  cursor: pointer;
+}
+
+.share:hover {
+  background: #b3d7ef;
+}
+
+.avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #7b1fa2;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 500;
+}
+
+/* ── toolbar extras ──────────────────────────────────────────────────── */
+
+.zoom {
+  border: none;
+  background: #f1f3f4;
+  border-radius: 4px;
+  padding: 4px 6px;
+  font: inherit;
+}
+
+.fx {
+  color: #5f6368;
+  font-style: italic;
+  padding: 0 8px 0 10px;
+  border-right: 1px solid var(--border);
+}
+
+/* ── dynamic columns, selection, resize ──────────────────────────────── */
+
+.cell {
+  position: relative;
+}
+
+.cell.in-range {
+  background: #e8f0fe;
+}
+
+.col-resizer {
+  position: absolute;
+  right: -3px;
+  top: 0;
+  width: 6px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 5;
+}
+
+.col-resizer:hover {
+  background: var(--accent);
+}
+
+.agg {
+  font-weight: 500;
+  color: #202124;
+}

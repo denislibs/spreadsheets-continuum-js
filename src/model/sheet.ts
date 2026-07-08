@@ -93,6 +93,7 @@ export function evalSheet(raw: Raw): Map<CellId, Computed> {
 
 export type Action =
   | { type: "edit"; id: CellId; raw: string }
+  | { type: "clearRange"; ids: CellId[] }
   | { type: "undo" }
   | { type: "redo" }
   | { type: "replace"; cells: Raw };
@@ -117,6 +118,16 @@ export function reduce(a: Action, s: SheetState): SheetState {
       const cells = new Map(s.cells);
       if (a.raw === "") cells.delete(a.id);
       else cells.set(a.id, a.raw);
+      return {
+        cells,
+        past: [...s.past.slice(-HISTORY_LIMIT + 1), s.cells],
+        future: [],
+      };
+    }
+    case "clearRange": {
+      // one action → one history snapshot → one Ctrl+Z
+      const cells = new Map(s.cells);
+      for (const id of a.ids) cells.delete(id);
       return {
         cells,
         past: [...s.past.slice(-HISTORY_LIMIT + 1), s.cells],
@@ -157,3 +168,33 @@ export const format = (v: Computed | undefined): string => {
   if (typeof v === "string") return v;
   return Number.isInteger(v) ? String(v) : String(Math.round(v * 1e6) / 1e6);
 };
+
+// ── range selection helpers ─────────────────────────────────────────────────
+
+export interface Rect {
+  c1: number;
+  c2: number;
+  r1: number;
+  r2: number;
+}
+
+export const rectOf = (
+  a: { c: number; r: number },
+  b: { c: number; r: number },
+): Rect => ({
+  c1: Math.min(a.c, b.c),
+  c2: Math.max(a.c, b.c),
+  r1: Math.min(a.r, b.r),
+  r2: Math.max(a.r, b.r),
+});
+
+export const inRect = (rect: Rect, c: number, r: number): boolean =>
+  c >= rect.c1 && c <= rect.c2 && r >= rect.r1 && r <= rect.r2;
+
+export function idsInRect(rect: Rect): CellId[] {
+  const out: CellId[] = [];
+  for (let r = rect.r1; r <= rect.r2; r++) {
+    for (let c = rect.c1; c <= rect.c2; c++) out.push(cellId(c, r));
+  }
+  return out;
+}
