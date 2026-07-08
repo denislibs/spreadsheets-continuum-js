@@ -348,3 +348,71 @@ describe("structured tables", () => {
     s.dispose();
   });
 });
+
+describe("sheets toolbar", () => {
+  test("borders dropdown applies outer borders to the selection", () => {
+    const s = setup();
+    s.cell("B2").dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    key(s.grid, "ArrowDown", { shiftKey: true });
+    key(s.grid, "ArrowRight", { shiftKey: true }); // B2:C3
+
+    (
+      s.container.querySelector('[title="Границы"]') as HTMLButtonElement
+    ).dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    (
+      s.container.querySelector(
+        '[title="Внешние границы"]',
+      ) as HTMLButtonElement
+    ).click();
+
+    expect(s.cell("B2").getAttribute("style")).toContain("border-top");
+    expect(s.cell("B2").getAttribute("style")).toContain("border-left");
+    expect(s.cell("B2").getAttribute("style")).not.toContain("border-right");
+    expect(s.cell("C3").getAttribute("style")).toContain("border-bottom");
+    key(s.grid, "z", { ctrlKey: true }); // one undo clears the whole frame
+    expect(s.cell("B2").getAttribute("style")).not.toContain("border-top");
+    s.dispose();
+  });
+
+  test("percent format renders the value ×100 with a sign", () => {
+    const s = setup();
+    key(s.grid, "0");
+    s.typeInto("0.25");
+    key(s.grid, "ArrowUp");
+    (
+      s.container.querySelector(
+        '[title="Процентный формат"]',
+      ) as HTMLButtonElement
+    ).click();
+    expect(s.cell("A1").textContent).toBe("25%");
+    s.dispose();
+  });
+
+  test("decimal buttons shift precision", () => {
+    const s = setup();
+    key(s.grid, "3");
+    s.typeInto("3.14159");
+    key(s.grid, "ArrowUp");
+    const inc = s.container.querySelector(
+      '[title="Увеличить число знаков после запятой"]',
+    ) as HTMLButtonElement;
+    inc.click();
+    inc.click();
+    expect(s.cell("A1").textContent).toBe("3.14");
+    s.dispose();
+  });
+
+  test("Σ inserts a function draft into the editor", () => {
+    const s = setup();
+    (
+      s.container.querySelector('[title="Ещё"]') as HTMLButtonElement
+    ).dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    const sum = [...s.container.querySelectorAll(".more-fns .dd-item")].find(
+      (b) => b.textContent === "SUM",
+    ) as HTMLButtonElement;
+    sum.click();
+    expect(s.editor()).not.toBeNull();
+    expect(s.editor()!.value).toBe("=SUM(");
+    s.dispose();
+  });
+});

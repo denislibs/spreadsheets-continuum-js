@@ -5,7 +5,14 @@
 import { Behavior } from "@continuum-js/frp";
 import { Show, onMount } from "@continuum-js/dom";
 import type { Events } from "@continuum-js/dom";
-import { COLS, ROWS, cellId, format, inRect, styleOf } from "../model/sheet.js";
+import {
+  COLS,
+  ROWS,
+  cellId,
+  display,
+  inRect,
+  styleOf,
+} from "../model/sheet.js";
 import { optionColor } from "../model/tables.js";
 import type { Tables } from "../composables/createTables.js";
 import { TableOverlays } from "./TableOverlays.js";
@@ -143,10 +150,13 @@ function Cell(props: {
   const pres = tables.presentation.map((p) => p.get(id));
 
   // a table header shows the column name; everything else shows the value
-  const text = Behavior.lift2(
-    (m, p) => (p?.kind === "header" ? p.label : format(m.get(id))),
+  // through its number format
+  const text = Behavior.lift3(
+    (m, p, f) =>
+      p?.kind === "header" ? p.label : display(m.get(id), f.get(id)),
     sheet.computed,
     pres,
+    sheet.formats,
   );
   const cls = Behavior.lift3(
     (a, rect, p) => {

@@ -4,6 +4,7 @@
 
 import { Behavior } from "@continuum-js/frp";
 import { idsInRect, type CellFormat } from "../model/sheet.js";
+import { borderPatches, type BorderKind } from "../model/borders.js";
 import type { Sheet } from "../composables/createSheet.js";
 import type { Selection } from "../composables/createSelection.js";
 
@@ -13,6 +14,11 @@ export interface Formatting {
   anchorFormat: Behavior<CellFormat>;
   apply: (patch: Partial<CellFormat>) => void;
   toggle: (key: ToggleKey) => void;
+  togglePercent: () => void;
+  toggleWrap: () => void;
+  /** shift decimal places by ±1 (0…8) */
+  shiftDecimals: (delta: 1 | -1) => void;
+  applyBorders: (kind: BorderKind) => void;
   clear: () => void;
 }
 
@@ -35,6 +41,22 @@ export function makeFormatting(sheet: Sheet, selection: Selection): Formatting {
     apply,
     toggle: (key) =>
       apply({ [key]: anchorFormat.sample()[key] ? undefined : true }),
+    togglePercent: () =>
+      apply({
+        nf: anchorFormat.sample().nf === "percent" ? undefined : "percent",
+      }),
+    toggleWrap: () =>
+      apply({ wr: anchorFormat.sample().wr ? undefined : true }),
+    shiftDecimals: (delta) => {
+      const cur = anchorFormat.sample().dec ?? 0;
+      const next = Math.max(0, Math.min(8, cur + delta));
+      apply({ dec: next });
+    },
+    applyBorders: (kind) =>
+      sheet.dispatch({
+        type: "formatCells",
+        entries: borderPatches(selection.rect.sample(), kind),
+      }),
     clear: () =>
       apply({
         b: undefined,
@@ -45,6 +67,13 @@ export function makeFormatting(sheet: Sheet, selection: Selection): Formatting {
         fg: undefined,
         bg: undefined,
         fs: undefined,
+        nf: undefined,
+        dec: undefined,
+        wr: undefined,
+        bt: undefined,
+        bb: undefined,
+        bl: undefined,
+        br: undefined,
       }),
   };
 }

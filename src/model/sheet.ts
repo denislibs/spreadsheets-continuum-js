@@ -134,6 +134,13 @@ export interface CellFormat {
   fg?: string; // text color
   bg?: string; // fill color
   fs?: number; // font size, px
+  nf?: "percent"; // number format
+  dec?: number; // decimal places
+  wr?: boolean; // wrap text
+  bt?: boolean; // borders, per edge
+  bb?: boolean;
+  bl?: boolean;
+  br?: boolean;
 }
 export type Formats = Map<CellId, CellFormat>;
 
@@ -153,7 +160,27 @@ export function styleOf(f: CellFormat | undefined): string {
   if (f.fg) out.push(`color:${f.fg}`);
   if (f.bg) out.push(`background:${f.bg}`);
   if (f.fs) out.push(`font-size:${f.fs}px`);
+  const B = "1px solid #202124";
+  if (f.bt) out.push(`border-top:${B}`);
+  if (f.bb) out.push(`border-bottom:${B}`);
+  if (f.bl) out.push(`border-left:${B}`);
+  if (f.br) out.push(`border-right:${B}`);
+  if (f.wr) out.push("white-space:normal;overflow:visible;line-height:1.3");
   return out.join(";");
+}
+
+/** How a computed value is shown, number format applied. */
+export function display(
+  v: Computed | undefined,
+  f: CellFormat | undefined,
+): string {
+  if (typeof v !== "number") return format(v);
+  if (f?.nf === "percent") {
+    const n = v * 100;
+    return (f.dec !== undefined ? n.toFixed(f.dec) : format(n)) + "%";
+  }
+  if (f?.dec !== undefined) return v.toFixed(f.dec);
+  return format(v);
 }
 
 // ── actions and the reducer ─────────────────────────────────────────────────
@@ -165,6 +192,7 @@ export type Action =
   | { type: "fill"; ids: CellId[]; raw: string }
   | { type: "clearRange"; ids: CellId[] }
   | { type: "format"; ids: CellId[]; patch: Partial<CellFormat> }
+  | { type: "formatCells"; entries: Array<[CellId, Partial<CellFormat>]> }
   | { type: "addTable"; table: Table }
   | { type: "addTableRows"; id: string; count: number }
   | { type: "undo" }
@@ -192,6 +220,23 @@ export const emptySheet = (
 ): SheetState => ({ cells, formats, tables, past: [], future: [] });
 
 const HISTORY_LIMIT = 100;
+
+function mergePatch(
+  formats: Formats,
+  id: CellId,
+  patch: Partial<CellFormat>,
+): void {
+  const merged: CellFormat = { ...formats.get(id) };
+  for (const [k, v] of Object.entries(patch)) {
+    if (v === undefined || v === false) {
+      delete merged[k as keyof CellFormat];
+    } else {
+      (merged as Record<string, unknown>)[k] = v;
+    }
+  }
+  if (Object.keys(merged).length === 0) formats.delete(id);
+  else formats.set(id, merged);
+}
 
 const snap = (s: SheetState): Snap => ({
   cells: s.cells,
@@ -231,18 +276,12 @@ export function reduce(a: Action, s: SheetState): SheetState {
     }
     case "format": {
       const formats = new Map(s.formats);
-      for (const id of a.ids) {
-        const merged: CellFormat = { ...formats.get(id) };
-        for (const [k, v] of Object.entries(a.patch)) {
-          if (v === undefined || v === false) {
-            delete merged[k as keyof CellFormat];
-          } else {
-            (merged as Record<string, unknown>)[k] = v;
-          }
-        }
-        if (Object.keys(merged).length === 0) formats.delete(id);
-        else formats.set(id, merged);
-      }
+      for (const id of a.ids) mergePatch(formats, id, a.patch);
+      return push(s, { formats });
+    }
+    case "formatCells": {
+      const formats = new Map(s.formats);
+      for (const [id, patch] of a.entries) mergePatch(formats, id, patch);
       return push(s, { formats });
     }
     case "addTable":

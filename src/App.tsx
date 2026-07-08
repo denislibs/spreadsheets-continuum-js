@@ -117,6 +117,7 @@ export function App() {
       />
       <Toolbar
         sheet={sheet}
+        editor={editor}
         fmt={fmt}
         setZoom={layout.setZoom}
         focusGrid={focusGrid}
