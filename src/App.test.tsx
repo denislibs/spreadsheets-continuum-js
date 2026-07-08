@@ -1,5 +1,6 @@
 import { describe, test, expect, beforeEach } from "vitest";
 import { mount } from "@continuum-js/dom";
+import { dateLabel } from "./model/sheet.js";
 import { SheetEditor } from "./components/SheetEditor.js";
 
 const key = (el: Element, k: string, mods: KeyboardEventInit = {}) =>
@@ -495,6 +496,60 @@ describe("table chrome", () => {
     s.dispose();
   });
 
+  test("inserting a table makes its header row taller, Sheets-style", () => {
+    const s = setup();
+    insertUsers(s);
+    // the tall header leaves room for the name tab above the column names
+    expect(s.grid.getAttribute("style")).toContain("--h0:46px");
+    s.dispose();
+  });
+
+  test("the name chip stays visible for a table anchored at A1 and rides the pinned header", () => {
+    const s = setup();
+    insertUsers(s);
+    const chip = s.container.querySelector(".tname") as HTMLElement;
+    // no room above row 1 — the chip becomes a tab on the header's top-left
+    expect(chip.getAttribute("style")).not.toContain("display:none");
+    expect(chip.getAttribute("style")).toContain("top:26px");
+
+    s.grid.scrollTop = 100; // pinned — the tab follows the sticky header
+    s.grid.dispatchEvent(new Event("scroll"));
+    expect(chip.getAttribute("style")).toContain("top:126px");
+    s.dispose();
+  });
+
+  test("a column can become «Дата»; «Срок» is a date column out of the box", () => {
+    const s = setup();
+    const insertMenu = [...s.container.querySelectorAll(".menu-item")].find(
+      (m) => m.textContent === "Вставка",
+    )!;
+    insertMenu.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    (
+      [...s.container.querySelectorAll(".dd-item")].find(
+        (b) => b.textContent === "Таблицы",
+      ) as HTMLButtonElement
+    ).click();
+    (
+      [...s.container.querySelectorAll(".tp-item")].find((b) =>
+        b.textContent!.includes("Задачи"),
+      ) as HTMLButtonElement
+    ).click();
+
+    // the «Задачи» template ships «Срок» (column D) as a date column
+    expect(s.cell("D1").className).toContain("th-date");
+    expect(s.cell("D2").className).toContain("t-date");
+
+    // and any column can be switched to «Дата» through its menu
+    (s.container.querySelectorAll(".th-dd")[0] as HTMLButtonElement).click();
+    (
+      [...s.container.querySelectorAll(".colmenu .dd-item")].find(
+        (b) => b.textContent === "Дата",
+      ) as HTMLButtonElement
+    ).click();
+    expect(s.cell("A2").className).toContain("t-date");
+    s.dispose();
+  });
+
   test("the name chip renames the table through its menu", () => {
     const s = setup();
     insertUsers(s);
@@ -640,6 +695,124 @@ describe("sticky band, options editor, links", () => {
     const s = setup();
     key(s.grid, "k", { ctrlKey: true });
     expect(s.editor()!.value).toBe("https://");
+    s.dispose();
+  });
+});
+
+describe("Формат menu", () => {
+  const openFormat = (s: ReturnType<typeof setup>) => {
+    const m = [...s.container.querySelectorAll(".menu-item")].find(
+      (x) => x.textContent === "Формат",
+    )!;
+    m.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+  };
+  const hoverSub = (s: ReturnType<typeof setup>, label: string) => {
+    const it = [...s.container.querySelectorAll(".dd-parent")].find((b) =>
+      b.textContent!.includes(label),
+    )!;
+    // NB: mouseenter does not bubble in real browsers
+    it.dispatchEvent(new MouseEvent("mouseenter"));
+  };
+  const clickSub = (s: ReturnType<typeof setup>, label: string) => {
+    (
+      [...s.container.querySelectorAll(".dd-sub .dd-item")].find(
+        (b) => (b.querySelector(".dd-label") ?? b).textContent === label,
+      ) as HTMLButtonElement
+    ).click();
+  };
+
+  test("Числа → Валюта formats the selection", () => {
+    const s = setup();
+    key(s.grid, "1");
+    s.typeInto("1000.12");
+    key(s.grid, "ArrowUp"); // back to A1
+
+    openFormat(s);
+    hoverSub(s, "Числа");
+    clickSub(s, "Валюта");
+    expect(s.cell("A1").textContent).toBe("₽1 000,12");
+    s.dispose();
+  });
+
+  test("Текст → Полужирный toggles bold; Очистить форматирование clears", () => {
+    const s = setup();
+    key(s.grid, "x");
+    s.typeInto("привет");
+    key(s.grid, "ArrowUp");
+
+    openFormat(s);
+    hoverSub(s, "Текст");
+    clickSub(s, "Полужирный");
+    expect(s.cell("A1").getAttribute("style")).toContain("font-weight:700");
+
+    openFormat(s);
+    (
+      [...s.container.querySelectorAll(".dd-item")].find((b) =>
+        b.textContent!.includes("Очистить форматирование"),
+      ) as HTMLButtonElement
+    ).click();
+    expect(s.cell("A1").getAttribute("style") ?? "").not.toContain(
+      "font-weight",
+    );
+    s.dispose();
+  });
+
+  test("Выравнивание → По центру applies text-align", () => {
+    const s = setup();
+    openFormat(s);
+    hoverSub(s, "Выравнивание");
+    clickSub(s, "По центру");
+    expect(s.cell("A1").getAttribute("style")).toContain("text-align:center");
+    s.dispose();
+  });
+});
+
+describe("date picker", () => {
+  const insertTasks = (s: ReturnType<typeof setup>) => {
+    const m = [...s.container.querySelectorAll(".menu-item")].find(
+      (x) => x.textContent === "Вставка",
+    )!;
+    m.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    (
+      [...s.container.querySelectorAll(".dd-item")].find(
+        (b) => b.textContent === "Таблицы",
+      ) as HTMLButtonElement
+    ).click();
+    (
+      [...s.container.querySelectorAll(".tp-item")].find((b) =>
+        b.textContent!.includes("Задачи"),
+      ) as HTMLButtonElement
+    ).click();
+  };
+
+  test("a date cell opens the calendar; «Сегодня» writes today's date", () => {
+    const s = setup();
+    insertTasks(s);
+    // D is «Срок», a date column
+    s.cell("D2").dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    expect(s.container.querySelector(".date-dd")).not.toBeNull();
+
+    (s.container.querySelector(".dp-today") as HTMLButtonElement).click();
+    expect(s.cell("D2").textContent).toBe(dateLabel(new Date()));
+    expect(s.container.querySelector(".date-dd")).toBeNull(); // closed
+    s.dispose();
+  });
+
+  test("picking a day writes dd.mm.yyyy and month nav works", () => {
+    const s = setup();
+    insertTasks(s);
+    s.cell("D3").dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    (s.container.querySelector(".dp-next") as HTMLButtonElement).click();
+    const day = [...s.container.querySelectorAll(".dp-day:not(.other)")].find(
+      (b) => b.textContent === "15",
+    ) as HTMLButtonElement;
+    day.click();
+    const next = new Date();
+    next.setDate(1);
+    next.setMonth(next.getMonth() + 1);
+    expect(s.cell("D3").textContent).toBe(
+      dateLabel(new Date(next.getFullYear(), next.getMonth(), 15)),
+    );
     s.dispose();
   });
 });

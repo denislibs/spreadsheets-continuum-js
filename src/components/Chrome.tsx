@@ -20,7 +20,11 @@ export type MenuItem =
   | {
       label: string;
       action?: () => void;
+      /** right-aligned gray sample/shortcut, like Sheets */
+      hint?: string;
       disabled?: boolean | Behavior<boolean>;
+      /** a nested flyout (opens on hover) instead of an action */
+      sub?: MenuItem[];
     };
 export interface Menu {
   name: string;
@@ -43,11 +47,31 @@ export function Chrome(props: {
   onMenuAction: () => void; // e.g. refocus the grid after an item runs
 }) {
   const [openMenu, setOpenMenu] = newBehavior<string | null>(null);
+  const [openSub, setOpenSub] = newBehavior<string | null>(null);
   onMount(() => {
     const close = () => setOpenMenu(null);
     window.addEventListener("mousedown", close);
     onCleanup(() => window.removeEventListener("mousedown", close));
   });
+
+  const runItem = (action?: () => void) => {
+    action?.();
+    setOpenMenu(null);
+    setOpenSub(null);
+    props.onMenuAction();
+  };
+
+  const leafItem = (it: Exclude<MenuItem, { sep: true }>, topLevel = false) => (
+    <button
+      class="dd-item"
+      disabled={it.disabled ?? !it.action}
+      onClick={() => runItem(it.action)}
+      onMouseenter={topLevel ? () => setOpenSub(null) : undefined}
+    >
+      <span class="dd-label">{it.label}</span>
+      {it.hint && <span class="dd-hint">{it.hint}</span>}
+    </button>
+  );
 
   const menuBar = props.menus.map((m) => (
     <span
@@ -57,11 +81,13 @@ export function Chrome(props: {
       onMousedown={(e) => {
         e.stopPropagation();
         if (m.items.length === 0) return;
+        setOpenSub(null);
         setOpenMenu(openMenu.sample() === m.name ? null : m.name);
       }}
       onMouseenter={() => {
         // Sheets-style: while one menu is open, hovering slides to the next
         if (openMenu.sample() !== null && m.items.length > 0) {
+          setOpenSub(null);
           setOpenMenu(m.name);
         }
       }}
@@ -74,18 +100,29 @@ export function Chrome(props: {
               {m.items.map((it) =>
                 "sep" in it ? (
                   <div class="dd-sep"></div>
-                ) : (
-                  <button
-                    class="dd-item"
-                    disabled={it.disabled ?? !it.action}
-                    onClick={() => {
-                      it.action?.();
-                      setOpenMenu(null);
-                      props.onMenuAction();
-                    }}
+                ) : it.sub ? (
+                  <div
+                    class="dd-item dd-parent"
+                    onMouseenter={() => setOpenSub(it.label)}
                   >
-                    {it.label}
-                  </button>
+                    <span class="dd-label">{it.label}</span>
+                    <span class="dd-arrow">▸</span>
+                    <Show when={openSub.map((o) => o === it.label)}>
+                      {() => (
+                        <div class="dropdown dd-sub">
+                          {it.sub!.map((si) =>
+                            "sep" in si ? (
+                              <div class="dd-sep"></div>
+                            ) : (
+                              leafItem(si)
+                            ),
+                          )}
+                        </div>
+                      )}
+                    </Show>
+                  </div>
+                ) : (
+                  leafItem(it, true)
                 ),
               )}
             </div>

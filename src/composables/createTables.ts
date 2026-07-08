@@ -18,6 +18,11 @@ import {
 } from "../model/tables.js";
 import type { Sheet } from "./createSheet.js";
 import type { Selection } from "./createSelection.js";
+import type { Layout } from "./createLayout.js";
+
+/** Sheets look: table header rows are taller — the name tab sits in the
+ * top part, the column names at the bottom. */
+export const HEADER_ROW_H = 46;
 
 export interface OpenSelect {
   pos: Pos;
@@ -42,6 +47,11 @@ export interface Tables {
   showSelect: (pos: Pos, options: SelectOption[]) => void;
   choose: (pos: Pos, label: string) => void;
   closeSelect: () => void;
+  /** the calendar overlay for date-kind cells */
+  openDate: Behavior<Pos | null>;
+  showDate: (pos: Pos) => void;
+  pickDate: (pos: Pos, label: string) => void;
+  closeDate: () => void;
   /** the table-name chip menu and the per-column header menus */
   tableMenuOpen: Behavior<boolean>;
   toggleTableMenu: () => void;
@@ -65,9 +75,14 @@ export interface Tables {
   sort: (id: string, at: number, dir: "asc" | "desc") => void;
 }
 
-export function createTables(sheet: Sheet, selection: Selection): Tables {
+export function createTables(
+  sheet: Sheet,
+  selection: Selection,
+  layout: Layout,
+): Tables {
   const [panelOpen, setPanelOpen] = newBehavior(false);
   const [openSelect, setOpenSelect] = newBehavior<OpenSelect | null>(null);
+  const [openDate, setOpenDate] = newBehavior<Pos | null>(null);
   const [tableMenuOpen, setTableMenuOpen] = newBehavior(false);
   const [renaming, setRenaming] = newBehavior(false);
   const [colMenu, setColMenu] = newBehavior<number | null>(null);
@@ -91,6 +106,8 @@ export function createTables(sheet: Sheet, selection: Selection): Tables {
       type: "addTable",
       table: instantiate(tpl, anchor, crypto.randomUUID()),
     });
+    if (layout.heights.sample()[anchor.r] < HEADER_ROW_H)
+      layout.setRowHeight(anchor.r, HEADER_ROW_H);
     setPanelOpen(false);
   };
 
@@ -115,10 +132,18 @@ export function createTables(sheet: Sheet, selection: Selection): Tables {
       setOpenSelect(null);
     },
     closeSelect: () => setOpenSelect(null),
+    openDate,
+    showDate: (pos) => setOpenDate(pos),
+    pickDate: (pos, label) => {
+      sheet.dispatch({ type: "edit", id: cellId(pos.c, pos.r), raw: label });
+      setOpenDate(null);
+    },
+    closeDate: () => setOpenDate(null),
     tableMenuOpen,
     toggleTableMenu: () => {
       setColMenu(null);
       setOpenSelect(null); // one popover at a time
+      setOpenDate(null);
       setTableMenuOpen(!tableMenuOpen.sample());
     },
     renaming,
@@ -135,6 +160,7 @@ export function createTables(sheet: Sheet, selection: Selection): Tables {
     toggleColMenu: (col) => {
       setTableMenuOpen(false);
       setOpenSelect(null); // one popover at a time
+      setOpenDate(null);
       setColMenu(colMenu.sample() === col ? null : col);
     },
     optionsEditor,

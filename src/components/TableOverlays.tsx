@@ -8,6 +8,7 @@ import { Behavior, newBehavior } from "@continuum-js/frp";
 import { Show, Dynamic } from "@continuum-js/dom";
 import type { Tables } from "../composables/createTables.js";
 import type { Table, ColumnKind, SelectOption } from "../model/tables.js";
+import { dateLabel, type Pos } from "../model/sheet.js";
 import { HEAD_W, HEAD_H, type Layout } from "../composables/createLayout.js";
 import { IconChevron, IconPlus, IconClose } from "../icons.js";
 
@@ -32,6 +33,7 @@ const KINDS: Array<[ColumnKind, string]> = [
   ["text", "Текст"],
   ["person", "Персона"],
   ["select", "Раскрывающийся список"],
+  ["date", "Дата"],
   ["number", "Число"],
   ["percent", "Процент"],
   ["notes", "Примечания"],
@@ -105,11 +107,109 @@ export function TableOverlays(props: { tables: Tables; layout: Layout }) {
         }
       </Dynamic>
 
+      {/* the calendar overlay for date-kind cells */}
+      <Dynamic value={tables.openDate}>
+        {(pos) => pos && <DatePicker pos={pos} {...props} />}
+      </Dynamic>
+
       {/* everything anchored to the ACTIVE table */}
       <Dynamic value={tables.active}>
         {(t) => (t ? <ActiveTableChrome t={t} {...props} /> : null)}
       </Dynamic>
     </>
+  );
+}
+
+const MONTHS = [
+  "январь",
+  "февраль",
+  "март",
+  "апрель",
+  "май",
+  "июнь",
+  "июль",
+  "август",
+  "сентябрь",
+  "октябрь",
+  "ноябрь",
+  "декабрь",
+];
+const WEEKDAYS = ["П", "В", "С", "Ч", "П", "С", "В"];
+
+// the Sheets-style calendar under a date cell: month grid (Monday first),
+// ‹ › navigation and «Сегодня»
+function DatePicker(props: { pos: Pos; tables: Tables; layout: Layout }) {
+  const { pos, tables, layout } = props;
+  const today = new Date();
+  const [view, setView] = newBehavior({
+    y: today.getFullYear(),
+    m: today.getMonth(),
+  });
+  const shift = (d: number) => {
+    const v = view.sample();
+    const next = new Date(v.y, v.m + d, 1);
+    setView({ y: next.getFullYear(), m: next.getMonth() });
+  };
+
+  return (
+    <div
+      class="date-dd"
+      style={Behavior.lift2(
+        (ws, hs) => `left:${left(ws, pos.c)}px;top:${top(hs, pos.r + 1)}px`,
+        layout.widths,
+        layout.heights,
+      )}
+      onMousedown={(e) => e.stopPropagation()}
+    >
+      <Dynamic value={view}>
+        {(v) => {
+          const first = new Date(v.y, v.m, 1);
+          const start = 1 - ((first.getDay() + 6) % 7); // back to Monday
+          const days = Array.from(
+            { length: 42 },
+            (_, i) => new Date(v.y, v.m, start + i),
+          );
+          return (
+            <>
+              <div class="dp-head">
+                <span class="dp-title">
+                  {MONTHS[v.m]} {v.y} г.
+                </span>
+                <button class="dp-nav dp-prev" onClick={() => shift(-1)}>
+                  ‹
+                </button>
+                <button class="dp-nav dp-next" onClick={() => shift(1)}>
+                  ›
+                </button>
+              </div>
+              <div class="dp-grid">
+                {WEEKDAYS.map((w) => (
+                  <span class="dp-wd">{w}</span>
+                ))}
+                {days.map((d) => {
+                  const other = d.getMonth() !== v.m;
+                  const isToday = dateLabel(d) === dateLabel(today);
+                  return (
+                    <button
+                      class={`dp-day${other ? " other" : ""}${isToday ? " today" : ""}`}
+                      onClick={() => tables.pickDate(pos, dateLabel(d))}
+                    >
+                      {d.getDate()}
+                    </button>
+                  );
+                })}
+              </div>
+              <button
+                class="dp-today"
+                onClick={() => tables.pickDate(pos, dateLabel(today))}
+              >
+                Сегодня
+              </button>
+            </>
+          );
+        }}
+      </Dynamic>
+    </div>
   );
 }
 
@@ -119,9 +219,10 @@ function ActiveTableChrome(props: {
   layout: Layout;
 }) {
   const { t, tables, layout } = props;
-  const at = (c: number, dTop: number) =>
+  const at = (c: number, dTop: (hs: number[]) => number) =>
     Behavior.lift3(
-      (ws, hs, st) => `left:${left(ws, c)}px;top:${bandY(t, hs, st) + dTop}px`,
+      (ws, hs, st) =>
+        `left:${left(ws, c)}px;top:${bandY(t, hs, st) + dTop(hs)}px`,
       layout.widths,
       layout.heights,
       layout.scrollTop,
@@ -134,10 +235,11 @@ function ActiveTableChrome(props: {
         class="tname"
         style={Behavior.lift3(
           (ws, hs, st) => {
-            const y = top(hs, t.anchor.r) - 23;
-            // like Sheets: the chip rides its table and slips away under
-            // the letters row instead of floating over it
-            if (y < st + HEAD_H) return "display:none";
+            // above the header when there's room; with none (a table at
+            // row 1, or pinned under the letters) it becomes a tab on the
+            // header's top-left and rides the sticky row, like Sheets
+            const natural = top(hs, t.anchor.r) - 23;
+            const y = natural >= st + HEAD_H ? natural : bandY(t, hs, st);
             return (
               `left:${left(ws, t.anchor.c)}px;top:${y}px;` +
               `background:${t.headerColor ?? "#3d5a45"}`
@@ -179,7 +281,7 @@ function ActiveTableChrome(props: {
         {() => (
           <div
             class="dropdown tmenu"
-            style={at(t.anchor.c, 2)}
+            style={at(t.anchor.c, () => 24)}
             onMousedown={(e) => e.stopPropagation()}
           >
             <button class="dd-item" onClick={tables.startRename}>
@@ -212,7 +314,7 @@ function ActiveTableChrome(props: {
           style={Behavior.lift3(
             (ws, hs, st) =>
               `left:${left(ws, t.anchor.c + i + 1) - 20}px;` +
-              `top:${bandY(t, hs, st) + 4}px`,
+              `top:${bandY(t, hs, st) + hs[t.anchor.r] - 21}px`,
             layout.widths,
             layout.heights,
             layout.scrollTop,
@@ -230,7 +332,7 @@ function ActiveTableChrome(props: {
           col !== null && (
             <div
               class="dropdown colmenu"
-              style={at(t.anchor.c + col, HEAD_H - 4)}
+              style={at(t.anchor.c + col, (hs) => hs[t.anchor.r] - 4)}
               onMousedown={(e) => e.stopPropagation()}
             >
               <span class="tmenu-label">Изменить тип столбца</span>
@@ -299,7 +401,7 @@ function ActiveTableChrome(props: {
         style={Behavior.lift3(
           (ws, hs, st) =>
             `left:${left(ws, t.anchor.c + t.columns.length) + 3}px;` +
-            `top:${bandY(t, hs, st) + 1}px`,
+            `top:${bandY(t, hs, st) + Math.round((hs[t.anchor.r] - 22) / 2)}px`,
           layout.widths,
           layout.heights,
           layout.scrollTop,

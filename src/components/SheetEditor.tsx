@@ -34,7 +34,7 @@ export function SheetEditor(props: { docId: string }) {
   const editor = createEditor(sheet, selection);
   const layout = createLayout(base);
   const { title, setTitle } = createDocTitle(base);
-  const tables = createTables(sheet, selection);
+  const tables = createTables(sheet, selection, layout);
 
   // keep the home-page registry in sync: activity bumps updatedAt, the
   // document title mirrors into the doc list
@@ -108,7 +108,107 @@ export function SheetEditor(props: { docId: string }) {
       name: "Вставка",
       items: [{ label: "Таблицы", action: tables.openPanel }],
     },
-    { name: "Формат", items: [] },
+    {
+      name: "Формат",
+      items: [
+        {
+          label: "Числа",
+          sub: [
+            {
+              label: "Автоматический формат",
+              action: () => fmt.apply({ nf: undefined, dec: undefined }),
+            },
+            {
+              label: "Обычный текст",
+              action: () => fmt.apply({ nf: "plain" }),
+            },
+            { sep: true },
+            {
+              label: "Число",
+              hint: "1 000,12",
+              action: () => fmt.apply({ nf: "number" }),
+            },
+            {
+              label: "Процент",
+              hint: "10,12%",
+              action: () => fmt.apply({ nf: "percent" }),
+            },
+            {
+              label: "Экспоненциальный",
+              hint: "1,01E+03",
+              action: () => fmt.apply({ nf: "scientific" }),
+            },
+            { sep: true },
+            {
+              label: "Финансы",
+              hint: "(1 000,12)",
+              action: () => fmt.apply({ nf: "financial" }),
+            },
+            {
+              label: "Валюта",
+              hint: "₽1 000,12",
+              action: () => fmt.apply({ nf: "currency" }),
+            },
+            {
+              label: "Валюта (с округлением)",
+              hint: "₽1 000",
+              action: () => fmt.apply({ nf: "currency0" }),
+            },
+            { sep: true },
+            {
+              label: "Дата",
+              hint: "26.09.2008",
+              action: () => fmt.apply({ nf: "date" }),
+            },
+            {
+              label: "Время",
+              hint: "15:59:00",
+              action: () => fmt.apply({ nf: "time" }),
+            },
+          ],
+        },
+        {
+          label: "Текст",
+          sub: [
+            {
+              label: "Полужирный",
+              hint: "Ctrl+B",
+              action: () => fmt.toggle("b"),
+            },
+            { label: "Курсив", hint: "Ctrl+I", action: () => fmt.toggle("i") },
+            {
+              label: "Подчёркнутый",
+              hint: "Ctrl+U",
+              action: () => fmt.toggle("u"),
+            },
+            { label: "Зачёркнутый", action: () => fmt.toggle("s") },
+          ],
+        },
+        {
+          label: "Выравнивание",
+          sub: [
+            { label: "Слева", action: () => fmt.apply({ al: "left" }) },
+            { label: "По центру", action: () => fmt.apply({ al: "center" }) },
+            { label: "Справа", action: () => fmt.apply({ al: "right" }) },
+          ],
+        },
+        {
+          label: "Перенос",
+          sub: [
+            { label: "Переносить", action: () => fmt.apply({ wr: true }) },
+            { label: "Обрезать", action: () => fmt.apply({ wr: undefined }) },
+          ],
+        },
+        { sep: true },
+        { label: "Условное форматирование", disabled: true },
+        { sep: true },
+        {
+          label: "Очистить форматирование",
+          hint: "Ctrl+\\",
+          action: fmt.clear,
+        },
+      ],
+    },
     { name: "Данные", items: [] },
     { name: "Инструменты", items: [] },
     { name: "Расширения", items: [] },

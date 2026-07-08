@@ -6,7 +6,7 @@
 import { cellId, type CellId, type Pos } from "./sheet.js";
 
 export type ColumnKind =
-  "text" | "person" | "select" | "number" | "percent" | "notes";
+  "text" | "person" | "select" | "date" | "number" | "percent" | "notes";
 
 export interface SelectOption {
   label: string;
@@ -67,7 +67,7 @@ export const TEMPLATES: Template[] = [
           { label: "Готово", color: STATUS_GREEN },
         ],
       },
-      { name: "Срок", kind: "text" },
+      { name: "Срок", kind: "date" },
       {
         name: "Приоритет",
         kind: "select",
@@ -157,6 +157,7 @@ export type CellPresentation =
   | { kind: "header"; label: string; colKind: ColumnKind; color: string }
   | { kind: "select"; options: SelectOption[] }
   | { kind: "person" }
+  | { kind: "date" }
   | { kind: "number" }
   | { kind: "percent" }
   | { kind: "notes" };

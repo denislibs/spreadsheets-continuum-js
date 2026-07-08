@@ -5,6 +5,7 @@ import {
   emptySheet,
   toCsv,
   styleOf,
+  display,
   type SheetState,
 } from "./sheet.js";
 
@@ -188,5 +189,41 @@ describe("formats and fill", () => {
       "font-weight:700;font-style:italic;text-align:right;background:#ffff00",
     );
     expect(styleOf(undefined)).toBe("");
+  });
+});
+
+describe("number formats (Формат → Числа)", () => {
+  const NB = "\u00a0"; // ru-RU group separator
+
+  test("Число: grouped, two decimals", () => {
+    expect(display(1000.12, { nf: "number" })).toBe(`1${NB}000,12`);
+    expect(display(5, { nf: "number" })).toBe("5,00");
+  });
+
+  test("Валюта and Валюта (с округлением)", () => {
+    expect(display(1000.12, { nf: "currency" })).toBe(`₽1${NB}000,12`);
+    expect(display(1000.12, { nf: "currency0" })).toBe(`₽1${NB}000`);
+  });
+
+  test("Финансы: negatives in parentheses", () => {
+    expect(display(-1000.12, { nf: "financial" })).toBe(`(1${NB}000,12)`);
+    expect(display(1000.12, { nf: "financial" })).toBe(`1${NB}000,12`);
+  });
+
+  test("Экспоненциальный", () => {
+    expect(display(1012.34, { nf: "scientific" })).toBe("1,01E+03");
+    expect(display(0.5, { nf: "scientific" })).toBe("5,00E-01");
+  });
+
+  test("Дата and Время format parseable values", () => {
+    expect(display("2008-09-26", { nf: "date" })).toBe("26.09.2008");
+    expect(display("26.09.2008", { nf: "date" })).toBe("26.09.2008");
+    expect(display("2008-09-26T15:59:00", { nf: "time" })).toBe("15:59:00");
+    expect(display("не дата", { nf: "date" })).toBe("не дата");
+  });
+
+  test("Обычный текст leaves numbers unformatted", () => {
+    expect(display(1000.12, { nf: "plain" })).toBe("1000.12");
+    expect(display(1000.12, { nf: "plain", dec: 4 })).toBe("1000.12");
   });
 });

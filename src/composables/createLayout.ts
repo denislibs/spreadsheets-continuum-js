@@ -24,6 +24,7 @@ export interface Layout {
   gridStyle: Behavior<string>;
   /** the grid's vertical scroll offset, in CONTENT units (zoom factored out) */
   scrollTop: Behavior<number>;
+  setRowHeight: (r: number, h: number) => void;
   /** call from the grid's ref: wires the scroll listener into this owner */
   trackScroll: (el: HTMLElement) => void;
   startColResize: (c: number, e: Events.MouseEvent<HTMLDivElement>) => void;
@@ -83,6 +84,11 @@ export function createLayout(storageKey: string): Layout {
     setZoom,
     gridStyle,
     scrollTop,
+    setRowHeight: (r, h) => {
+      const next = [...heights.sample()];
+      next[r] = Math.max(MIN_H, h);
+      setHeights(next);
+    },
     trackScroll: (el) => {
       const onScroll = () => setRawScroll(el.scrollTop);
       el.addEventListener("scroll", onScroll, { passive: true });

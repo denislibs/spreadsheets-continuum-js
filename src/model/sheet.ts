@@ -125,6 +125,18 @@ const rowOf = (id: CellId): string => /[0-9]+$/.exec(id)![0];
 
 // ── cell formatting ─────────────────────────────────────────────────────────
 
+/** Формат → Числа: how a value is rendered (values stay untouched). */
+export type NumberFormat =
+  | "plain" // Обычный текст: no number interpretation at all
+  | "number" // 1 000,12
+  | "percent" // 12,34%
+  | "scientific" // 1,01E+03
+  | "financial" // (1 000,12)
+  | "currency" // ₽1 000,12
+  | "currency0" // ₽1 000
+  | "date" // 26.09.2008
+  | "time"; // 15:59:00
+
 export interface CellFormat {
   b?: boolean; // bold
   i?: boolean; // italic
@@ -134,7 +146,7 @@ export interface CellFormat {
   fg?: string; // text color
   bg?: string; // fill color
   fs?: number; // font size, px
-  nf?: "percent"; // number format
+  nf?: NumberFormat;
   dec?: number; // decimal places
   wr?: boolean; // wrap text
   bt?: boolean; // borders, per edge
@@ -173,15 +185,55 @@ export function styleOf(f: CellFormat | undefined): string {
 export const isUrl = (v: Computed | undefined): boolean =>
   typeof v === "string" && /^https?:\/\/\S+$/i.test(v);
 
+// 1234567.5 → "1 234 567,50" (ru style: NBSP groups, comma decimals)
+const ruNum = (n: number, dec: number): string => {
+  const [int, frac] = Math.abs(n).toFixed(dec).split(".");
+  const grouped = int.replace(/\B(?=(\d{3})+(?!\d))/g, "\u00a0");
+  return (n < 0 ? "-" : "") + grouped + (frac ? "," + frac : "");
+};
+
+// "26.09.2008" | ISO-ish strings → Date (dates-as-text is all we store)
+const parseDateish = (v: Computed | undefined): Date | null => {
+  if (typeof v !== "string") return null;
+  const m = /^(\d{1,2})\.(\d{1,2})\.(\d{4})$/.exec(v.trim());
+  const d = m ? new Date(+m[3], +m[2] - 1, +m[1]) : new Date(v);
+  return isNaN(d.getTime()) ? null : d;
+};
+
+const dd = (n: number) => String(n).padStart(2, "0");
+export const dateLabel = (d: Date): string =>
+  `${dd(d.getDate())}.${dd(d.getMonth() + 1)}.${d.getFullYear()}`;
+
 /** How a computed value is shown, number format applied. */
 export function display(
   v: Computed | undefined,
   f: CellFormat | undefined,
 ): string {
+  if (f?.nf === "date" || f?.nf === "time") {
+    const d = parseDateish(v);
+    if (!d) return format(v);
+    return f.nf === "date"
+      ? dateLabel(d)
+      : `${dd(d.getHours())}:${dd(d.getMinutes())}:${dd(d.getSeconds())}`;
+  }
   if (typeof v !== "number") return format(v);
+  if (f?.nf === "plain") return String(v);
   if (f?.nf === "percent") {
     const n = v * 100;
     return (f.dec !== undefined ? n.toFixed(f.dec) : format(n)) + "%";
+  }
+  if (f?.nf === "number") return ruNum(v, f.dec ?? 2);
+  if (f?.nf === "currency") return "₽" + ruNum(v, f.dec ?? 2);
+  if (f?.nf === "currency0") return "₽" + ruNum(v, 0);
+  if (f?.nf === "financial") {
+    const s = ruNum(Math.abs(v), f.dec ?? 2);
+    return v < 0 ? `(${s})` : s;
+  }
+  if (f?.nf === "scientific") {
+    const [m, e] = v.toExponential(f.dec ?? 2).split("e");
+    const sign = e.startsWith("-") ? "-" : "+";
+    const exp = e.replace(/^[+-]/, "").padStart(2, "0");
+    return `${m.replace(".", ",")}E${sign}${exp}`;
   }
   if (f?.dec !== undefined) return v.toFixed(f.dec);
   return format(v);

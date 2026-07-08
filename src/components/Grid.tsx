@@ -278,10 +278,12 @@ function Cell(props: {
         e.preventDefault(); // keep focus on the grid
         editor.commit(null);
         tables.closeSelect();
+        tables.closeDate();
         if (e.shiftKey) selection.extendTo({ c, r });
         else selection.beginDrag({ c, r });
         const p = tables.presentation.sample().get(id);
         if (p?.kind === "select") tables.showSelect({ c, r }, p.options);
+        else if (p?.kind === "date") tables.showDate({ c, r });
       }}
       onMouseenter={() => selection.dragOver({ c, r })}
       onDblclick={() => editor.start()}
